@@ -1,0 +1,94 @@
+═══════════════════════════════════════════════════════════════
+        LỆNH CHẠY ỨNG DỤNG KIỂM KHO TRÊN MACBOOK
+═══════════════════════════════════════════════════════════════
+
+📋 CÁCH 1: CHẠY VỚI VIRTUAL ENVIRONMENT (Khuyến nghị cho macOS)
+
+1. Mở Terminal (Ứng dụng Terminal trong Applications)
+
+2. Di chuyển đến thư mục chứa ứng dụng:
+   cd ~/Desktop/quet_kiem_kho
+
+3. Chạy script setup tự động:
+   chmod +x setup_venv.sh
+   ./setup_venv.sh
+
+4. Chạy ứng dụng:
+   ./run.sh
+
+   HOẶC chạy thủ công:
+   source venv/bin/activate
+   python kiem_kho_app.py
+
+═══════════════════════════════════════════════════════════════
+
+📋 CÁCH 1B: CHẠY TRỰC TIẾP (Nếu không dùng venv)
+
+1. Mở Terminal
+
+2. Di chuyển đến thư mục:
+   cd ~/Desktop/quet_kiem_kho
+
+3. Cài đặt thư viện với --user flag:
+   pip3 install --user -r requirements.txt
+
+4. Chạy ứng dụng:
+   python3 kiem_kho_app.py
+
+═══════════════════════════════════════════════════════════════
+
+🔨 CÁCH 2: TẠO FILE THỰC THI (Để double-click chạy)
+
+1. Mở Terminal
+
+2. Di chuyển đến thư mục:
+   cd ~/Desktop/quet_kiem_kho
+
+3. Cài đặt PyInstaller (nếu chưa có):
+   pip3 install pyinstaller
+
+4. Build file thực thi:
+   chmod +x build_macos.sh
+   ./build_macos.sh
+
+   HOẶC chạy trực tiếp:
+   pyinstaller --onefile --windowed --name "KiemKhoApp" --add-data "DuLieuDauVao.xlsx:." kiem_kho_app.py
+
+5. Sau khi build xong, file thực thi sẽ ở: dist/KiemKhoApp
+
+6. Copy file DuLieuDauVao.xlsx vào thư mục dist:
+   cp DuLieuDauVao.xlsx dist/
+
+7. Double-click vào file dist/KiemKhoApp để chạy
+
+═══════════════════════════════════════════════════════════════
+
+🚀 CÁCH 3: SỬ DỤNG SCRIPT SETUP TỰ ĐỘNG
+
+1. Mở Terminal
+
+2. Di chuyển đến thư mục:
+   cd ~/Desktop/quet_kiem_kho
+
+3. Chạy script setup:
+   python3 setup.py
+
+   Script sẽ tự động:
+   - Cài đặt thư viện
+   - Hỏi bạn có muốn build file thực thi không
+
+═══════════════════════════════════════════════════════════════
+
+💡 LƯU Ý QUAN TRỌNG:
+
+- Nếu gặp lỗi "command not found: python3", thử dùng "python" thay vì "python3"
+- Nếu gặp lỗi "ModuleNotFoundError: No module named '_tkinter'":
+  → Chạy: brew install python-tk
+  → Sau đó tạo lại venv: rm -rf venv && ./setup_venv.sh
+- Nếu gặp lỗi permission, thêm "sudo" trước lệnh (ví dụ: sudo pip3 install...)
+- File DuLieuDauVao.xlsx phải cùng thư mục với file thực thi
+- Lần đầu chạy file thực thi trên macOS có thể bị chặn, vào:
+  System Preferences → Security & Privacy → Click "Open Anyway"
+
+═══════════════════════════════════════════════════════════════
+
