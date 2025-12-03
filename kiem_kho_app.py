@@ -322,16 +322,28 @@ class KiemKhoApp:
                 # Nếu không có trong bundle, tìm ở thư mục chứa executable
                 if not excel_path.exists():
                     excel_path = Path(sys.executable).parent / "DuLieuDauVao.xlsx"
+                
+                # Xác định thư mục để tìm file thay thế (ưu tiên thư mục chứa executable)
+                search_dir = Path(sys.executable).parent
+                # Danh sách file thay thế nếu file chính không đọc được
+                xls_alternatives = [
+                    search_dir / "KIEM KE Năm -2025 - BP ONLINE.xls",
+                    search_dir / "KIEM KE Năm -2025 - BP ONLINE copy.xls",
+                    search_dir / "DuLieuDauVao.xls",
+                    # Cũng thử trong bundle
+                    base_path / "KIEM KE Năm -2025 - BP ONLINE.xls",
+                    base_path / "KIEM KE Năm -2025 - BP ONLINE copy.xls",
+                    base_path / "DuLieuDauVao.xls",
+                ]
             else:
                 # Chạy từ source code
                 excel_path = Path(__file__).parent / "DuLieuDauVao.xlsx"
-            
-            # Danh sách file thay thế nếu file chính không đọc được
-            xls_alternatives = [
-                Path(__file__).parent / "KIEM KE Năm -2025 - BP ONLINE.xls",
-                Path(__file__).parent / "KIEM KE Năm -2025 - BP ONLINE copy.xls",
-                Path(__file__).parent / "DuLieuDauVao.xls",
-            ]
+                # Danh sách file thay thế nếu file chính không đọc được
+                xls_alternatives = [
+                    Path(__file__).parent / "KIEM KE Năm -2025 - BP ONLINE.xls",
+                    Path(__file__).parent / "KIEM KE Năm -2025 - BP ONLINE copy.xls",
+                    Path(__file__).parent / "DuLieuDauVao.xls",
+                ]
             
             # Kiểm tra file .xlsx có hợp lệ không
             if excel_path.exists() and excel_path.suffix.lower() == '.xlsx':
@@ -917,6 +929,20 @@ class KiemKhoApp:
                 self.clear_table()
                 return
             
+            # Kiểm tra nếu đã quét đủ số tựa trong thùng này
+            so_tua_trong_thung = len(self.current_box_data)
+            so_tua_da_quet = len(self.scanned_items)
+            
+            # Nếu đang load lại cùng một thùng và đã quét đủ
+            if self.current_box_number == so_thung and so_tua_da_quet >= so_tua_trong_thung:
+                messagebox.showwarning(
+                    "Cảnh báo", 
+                    f"Thùng {so_thung} đã được kiểm kê đủ {so_tua_trong_thung} tựa!\n\n"
+                    f"Bạn đã quét {so_tua_da_quet} tựa.\n\n"
+                    "Vui lòng load thùng khác hoặc lưu dữ liệu trước khi tiếp tục."
+                )
+                return
+            
             self.current_box_number = so_thung
             self.scanned_items = {}  # Reset danh sách đã quét
             
@@ -946,6 +972,21 @@ class KiemKhoApp:
             self.isbn_entry.delete(0, tk.END)
             return
         
+        # Kiểm tra nếu đã quét đủ số tựa trong thùng
+        so_tua_trong_thung = len(self.current_box_data)
+        so_tua_da_quet = len(self.scanned_items)
+        
+        if so_tua_da_quet >= so_tua_trong_thung:
+            messagebox.showerror(
+                "Lỗi", 
+                f"Đã quét đủ số tựa trong thùng!\n\n"
+                f"Thùng {self.current_box_number} có {so_tua_trong_thung} tựa.\n"
+                f"Bạn đã quét {so_tua_da_quet} tựa.\n\n"
+                "Vui lòng lưu dữ liệu hoặc load thùng khác để tiếp tục."
+            )
+            self.isbn_entry.delete(0, tk.END)
+            return
+        
         # Tìm tựa trong dữ liệu thùng hiện tại
         if 'isbn' in self.current_box_data.columns:
             # Tìm ISBN (có thể không khớp hoàn toàn do format)
@@ -971,7 +1012,54 @@ class KiemKhoApp:
                     break
             
             if matched_row is None:
-                messagebox.showwarning("Cảnh báo", f"Không tìm thấy ISBN {isbn} trong thùng số {self.current_box_number}")
+                # Kiểm tra xem ISBN có tồn tại trong thùng khác không
+                isbn_clean = str(isbn).strip()
+                isbn_clean_digits = ''.join(filter(str.isdigit, isbn_clean))
+                found_in_other_box = False
+                other_box_number = None
+                
+                # Tìm trong toàn bộ dữ liệu
+                if 'isbn' in self.df.columns:
+                    # Tìm cột số thùng
+                    so_thung_col = None
+                    for col in self.df.columns:
+                        col_lower = str(col).lower().strip()
+                        if 'số thùng' in col_lower or 'so thung' in col_lower or col_lower == 'thùng' or col_lower == 'so_thung':
+                            so_thung_col = col
+                            break
+                    
+                    if so_thung_col:
+                        # Tìm ISBN trong toàn bộ dữ liệu
+                        for idx, row in self.df.iterrows():
+                            row_isbn = str(row.get('isbn', '')).strip()
+                            row_isbn_clean = ''.join(filter(str.isdigit, row_isbn))
+                            
+                            # Kiểm tra khớp ISBN
+                            if (row_isbn == isbn_clean or 
+                                row_isbn.endswith(isbn_clean) or 
+                                isbn_clean.endswith(row_isbn) or
+                                (row_isbn_clean and isbn_clean_digits and row_isbn_clean == isbn_clean_digits)):
+                                # Tìm thấy ISBN, lấy số thùng
+                                other_box_number = str(row.get(so_thung_col, '')).strip()
+                                if other_box_number and other_box_number != str(self.current_box_number):
+                                    found_in_other_box = True
+                                    break
+                
+                # Báo lỗi tương ứng
+                if found_in_other_box:
+                    messagebox.showerror(
+                        "Lỗi", 
+                        f"ISBN {isbn} không thuộc thùng đang kiểm kê!\n\n"
+                        f"ISBN này thuộc thùng: {other_box_number}\n"
+                        f"Thùng đang kiểm kê: {self.current_box_number}\n\n"
+                        f"Vui lòng quét đúng ISBN của thùng {self.current_box_number}."
+                    )
+                else:
+                    messagebox.showwarning(
+                        "Cảnh báo", 
+                        f"Không tìm thấy ISBN {isbn} trong dữ liệu!\n\n"
+                        f"Vui lòng kiểm tra lại mã ISBN hoặc thùng số {self.current_box_number}."
+                    )
                 self.isbn_entry.delete(0, tk.END)
                 return
             
@@ -1610,6 +1698,16 @@ class KiemKhoApp:
         self.scanned_items.clear()
         self.clear_table()
         self.so_tua_var.set("0")
+        
+        # Reset các input: Số thùng và Thùng / vị trí mới
+        if hasattr(self, 'so_thung_var'):
+            self.so_thung_var.set("")
+        if hasattr(self, 'vi_tri_moi_var'):
+            self.vi_tri_moi_var.set("")
+        
+        # Reset current_box_number và current_box_data
+        self.current_box_number = None
+        self.current_box_data = None
         
         # Chuyển sang tab Tổng hợp
         self.notebook.select(1)

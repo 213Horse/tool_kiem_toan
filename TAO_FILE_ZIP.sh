@@ -120,6 +120,11 @@ if [ -f "HUONG_DAN_SUA_TRANG_MAN_HINH.txt" ]; then
     echo "[OK] Da copy: HUONG_DAN_SUA_TRANG_MAN_HINH.txt"
 fi
 
+if [ -f "HUONG_DAN_PORTABLE.txt" ]; then
+    cp "HUONG_DAN_PORTABLE.txt" "$TEMP_DIR/"
+    echo "[OK] Da copy: HUONG_DAN_PORTABLE.txt"
+fi
+
 # Tạo file README trong zip
 cat > "$TEMP_DIR/README.txt" << 'EOF'
 ═══════════════════════════════════════════════════════════════

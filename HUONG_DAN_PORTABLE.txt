@@ -1,0 +1,54 @@
+========================================
+HƯỚNG DẪN SỬ DỤNG PORTABLE
+========================================
+
+Ứng dụng có thể chạy portable (copy ra bất kỳ đâu) sau khi build thành file .exe.
+
+1. SAU KHI BUILD FILE .EXE:
+   - File .exe sẽ nằm trong thư mục "dist"
+   - File DuLieuDauVao.xlsx đã được bundle vào trong .exe
+   - Bạn có thể copy file .exe ra bất kỳ đâu (Desktop, USB, thư mục khác...)
+
+2. CÁCH SỬ DỤNG PORTABLE:
+   
+   CÁCH 1: Chỉ copy file .exe (Đơn giản nhất)
+   - Copy file KiemKhoApp.exe ra Desktop hoặc bất kỳ đâu
+   - Double-click để chạy
+   - File DuLieuDauVao.xlsx đã được tích hợp sẵn trong .exe
+   - File config (kiem_kho_config.json) sẽ được tạo tự động trong cùng thư mục với .exe
+   
+   CÁCH 2: Copy cả .exe và file Excel (Để cập nhật dữ liệu dễ dàng)
+   - Copy file KiemKhoApp.exe
+   - Copy file DuLieuDauVao.xlsx (nếu muốn cập nhật dữ liệu mới)
+   - Đặt cả 2 file trong cùng một thư mục
+   - Double-click KiemKhoApp.exe để chạy
+   - Nếu có file DuLieuDauVao.xlsx trong cùng thư mục, ứng dụng sẽ ưu tiên dùng file đó
+   - Nếu không có, ứng dụng sẽ dùng file đã bundle trong .exe
+
+3. LƯU Ý:
+   - File config (kiem_kho_config.json) sẽ được lưu trong cùng thư mục với .exe
+   - Các file Excel xuất ra sẽ được lưu theo đường dẫn bạn đã cấu hình
+   - Nếu copy .exe sang máy khác, bạn cần cấu hình lại đường dẫn template và thư mục lưu file
+
+4. CẤU HÌNH ĐƯỜNG DẪN:
+   - Khi mở ứng dụng lần đầu, bạn sẽ được yêu cầu cấu hình 2 đường dẫn:
+     + Đường dẫn file Excel template (Kiemke_template.xlsx)
+     + Đường dẫn thư mục tự động lưu file (Kiemkecuoinam_...)
+   - Các cấu hình này sẽ được lưu trong file kiem_kho_config.json
+   - Nếu copy .exe sang máy khác, bạn cần cấu hình lại vì đường dẫn có thể khác
+
+5. VÍ DỤ:
+   - Copy KiemKhoApp.exe ra Desktop
+   - Double-click để chạy
+   - Cấu hình đường dẫn khi được hỏi
+   - Sử dụng bình thường
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+- File .exe có thể chạy độc lập, không cần cài đặt Python
+- File config sẽ được tạo tự động trong cùng thư mục với .exe
+- Nếu muốn cập nhật dữ liệu Excel, copy file DuLieuDauVao.xlsx vào cùng thư mục với .exe
+- Khi copy sang máy khác, nhớ cấu hình lại đường dẫn template và thư mục lưu file
+
