@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import sys
 import json
-import shutil
 
 class KiemKhoApp:
     def __init__(self, root):
@@ -30,49 +29,25 @@ class KiemKhoApp:
         self.edit_entry = None  # Entry widget để chỉnh sửa trực tiếp
         self.editing_item = None  # Item đang được chỉnh sửa
         self.error_highlights = {}  # Lưu các highlight widgets: {item_id: [entry1, entry2]}
-        self.template_file_path = None  # Đường dẫn file Excel cố định (template)
-        self.auto_save_folder = None  # Thư mục tự động lưu file Excel 2 (Kiemkecuoinam)
+        self.excel_path_1 = None  # Đường dẫn file Excel 1 (Kiemke)
+        self.excel_path_2 = None  # Đường dẫn file Excel 2 (Kiemkecuoinam)
         self.config_file = self.get_config_file_path()  # Đường dẫn file config
-        self.tong_hop_data = []  # Lưu tổng hợp các data đã kiểm kê
-        self.notebook = None  # Notebook widget để chứa các tab
-        self.tong_hop_tree = None  # Treeview trong tab Tổng hợp
         
         # Load cấu hình từ file (nếu có)
-        saved_config = self.load_config()
-        need_setup = False
-        
-        if saved_config:
-            template_path = saved_config.get('template_file_path')
-            auto_folder = saved_config.get('auto_save_folder')
-            
-            # Kiểm tra cả 2 đường dẫn có tồn tại không
-            if template_path and auto_folder:
-                if os.path.isfile(template_path) and os.path.isdir(auto_folder):
-                    # Cả 2 đường dẫn đều hợp lệ
-                    self.template_file_path = template_path
-                    self.auto_save_folder = auto_folder
-                else:
-                    # Một trong hai hoặc cả hai đường dẫn không tồn tại
-                    need_setup = True
+        saved_paths = self.load_config()
+        if saved_paths and saved_paths.get('excel_path_1') and saved_paths.get('excel_path_2'):
+            # Kiểm tra thư mục chứa file có tồn tại không
+            path1_dir = os.path.dirname(saved_paths['excel_path_1'])
+            path2_dir = os.path.dirname(saved_paths['excel_path_2'])
+            if os.path.isdir(path1_dir) and os.path.isdir(path2_dir):
+                self.excel_path_1 = saved_paths['excel_path_1']
+                self.excel_path_2 = saved_paths['excel_path_2']
             else:
-                # Thiếu một trong hai đường dẫn
-                need_setup = True
+                # Nếu thư mục không tồn tại, hiển thị dialog cấu hình lại
+                self.setup_excel_paths()
         else:
-            # Không có cấu hình
-            need_setup = True
-        
-        # Nếu cần cấu hình, hiển thị dialog
-        if need_setup:
-            # Đảm bảo root window được hiển thị trước khi tạo dialog
-            self.root.deiconify()
-            self.root.update()
-            self.setup_paths()
-            
-            # Sau khi setup xong, kiểm tra lại xem có cấu hình hợp lệ không
-            if not self.template_file_path or not self.auto_save_folder:
-                # Nếu vẫn không có cấu hình hợp lệ, đóng app
-                self.root.quit()
-                return
+            # Nếu không có cấu hình, hiển thị dialog cấu hình
+            self.setup_excel_paths()
         
         # Load dữ liệu từ Excel
         self.load_data()
@@ -100,102 +75,76 @@ class KiemKhoApp:
             if self.config_file.exists():
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                    # Format mới: có cả template_file_path và auto_save_folder
-                    if 'template_file_path' in config and 'auto_save_folder' in config:
+                    # Hỗ trợ cả format cũ và mới
+                    if 'excel_path_1' in config and 'excel_path_2' in config:
                         return {
-                            'template_file_path': config['template_file_path'],
-                            'auto_save_folder': config['auto_save_folder']
+                            'excel_path_1': config['excel_path_1'],
+                            'excel_path_2': config['excel_path_2']
                         }
-                    # Format cũ - hỗ trợ backward compatibility
                     elif 'auto_save_folder' in config:
-                        return {
-                            'template_file_path': None,
-                            'auto_save_folder': config['auto_save_folder']
-                        }
+                        # Format cũ - không dùng nữa
+                        return None
         except Exception as e:
             print(f"Lỗi khi đọc config: {str(e)}")
         return None
     
-    def save_config(self, template_path, folder_path):
+    def save_config(self, excel_path_1, excel_path_2):
         """Lưu cấu hình vào file"""
         try:
             config = {
-                'template_file_path': template_path,
-                'auto_save_folder': folder_path
+                'excel_path_1': excel_path_1,
+                'excel_path_2': excel_path_2
             }
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"Lỗi khi lưu config: {str(e)}")
     
-    def setup_paths(self):
-        """Hiển thị dialog để cấu hình 2 đường dẫn"""
-        try:
-            # Đảm bảo root window được hiển thị và update trước
-            self.root.deiconify()
-            self.root.update()
-            self.root.update_idletasks()
-        except Exception as e:
-            print(f"Lỗi khi hiển thị root window: {str(e)}")
+    def setup_excel_paths(self):
+        """Hiển thị dialog để cấu hình 2 đường dẫn file Excel"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Cấu hình đường dẫn file Excel")
+        dialog.geometry("700x320")
+        dialog.configure(bg='#F5F5F5')
+        dialog.transient(self.root)
+        dialog.grab_set()  # Modal dialog
         
-        try:
-            dialog = tk.Toplevel(self.root)
-            dialog.title("Cấu hình đường dẫn")
-            dialog.geometry("700x380")
-            dialog.configure(bg='#F5F5F5')
-            dialog.transient(self.root)
-            dialog.grab_set()  # Modal dialog
-            
-            # Đặt cửa sổ ở giữa màn hình
-            dialog.update_idletasks()
-            x = (dialog.winfo_screenwidth() // 2) - (700 // 2)
-            y = (dialog.winfo_screenheight() // 2) - (380 // 2)
-            dialog.geometry(f"700x380+{x}+{y}")
-            
-            # Đảm bảo dialog được focus và hiển thị trên cùng
-            dialog.lift()
-            dialog.focus_force()
-            dialog.attributes('-topmost', True)  # Luôn hiển thị trên cùng
-            dialog.update()
-        except Exception as e:
-            print(f"Lỗi khi tạo dialog: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            # Nếu không thể tạo dialog, hiển thị messagebox thay thế
-            try:
-                messagebox.showerror("Lỗi", f"Không thể hiển thị dialog cấu hình:\n{str(e)}")
-            except:
-                pass
-            return
+        # Đặt cửa sổ ở giữa màn hình
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (700 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (320 // 2)
+        dialog.geometry(f"700x320+{x}+{y}")
         
         # Label hướng dẫn
-        label_text = "Cấu hình 2 đường dẫn:\n1. File Excel cố định (để copy khi SAVE)\n2. Thư mục lưu file bí mật (Kiemkecuoinam)"
+        label_text = "Nhập đường dẫn đầy đủ cho 2 file Excel:\n(File sẽ được lưu vào các đường dẫn này khi bấm SAVE)"
         tk.Label(dialog, text=label_text, bg='#F5F5F5', fg='#000000', 
                 font=('Arial', 11), justify=tk.LEFT, wraplength=650).pack(pady=15, padx=20)
         
         # Load giá trị đã lưu nếu có
-        saved_config = self.load_config()
+        saved_paths = self.load_config()
         
-        # Đường dẫn 1: File Excel cố định
-        tk.Label(dialog, text="1. File Excel cố định (template):", bg='#F5F5F5', fg='#000000', 
+        # File Excel 1 (Kiemke)
+        tk.Label(dialog, text="File Excel 1 (Kiemke):", bg='#F5F5F5', fg='#000000', 
                 font=('Arial', 10, 'bold'), anchor='w').pack(pady=(10, 5), padx=20, fill=tk.X)
         
         input_frame1 = tk.Frame(dialog, bg='#F5F5F5')
         input_frame1.pack(pady=5, padx=20, fill=tk.X)
         
         path1_var = tk.StringVar()
-        if saved_config and saved_config.get('template_file_path'):
-            path1_var.set(saved_config['template_file_path'])
+        if saved_paths and saved_paths.get('excel_path_1'):
+            path1_var.set(saved_paths['excel_path_1'])
         
-        path1_entry = tk.Entry(input_frame1, textvariable=path1_var, width=50, 
+        path1_entry = tk.Entry(input_frame1, textvariable=path1_var, width=60, 
                               font=('Arial', 10), relief=tk.SOLID, bd=1,
                               bg='#FFFFFF', fg='#000000', insertbackground='#000000')
         path1_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
         def browse_file1():
-            file_path = filedialog.askopenfilename(
-                title="Chọn file Excel cố định",
-                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+            file_path = filedialog.asksaveasfilename(
+                title="Chọn hoặc tạo file Excel 1",
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                initialfile="Kiemke.xlsx"
             )
             if file_path:
                 path1_var.set(file_path)
@@ -207,28 +156,33 @@ class KiemKhoApp:
                                cursor='hand2')
         browse1_btn.pack(side=tk.RIGHT)
         
-        # Đường dẫn 2: Thư mục lưu file bí mật
-        tk.Label(dialog, text="2. Thư mục lưu file bí mật (Kiemkecuoinam):", bg='#F5F5F5', fg='#000000', 
+        # File Excel 2 (Kiemkecuoinam)
+        tk.Label(dialog, text="File Excel 2 (Kiemkecuoinam):", bg='#F5F5F5', fg='#000000', 
                 font=('Arial', 10, 'bold'), anchor='w').pack(pady=(15, 5), padx=20, fill=tk.X)
         
         input_frame2 = tk.Frame(dialog, bg='#F5F5F5')
         input_frame2.pack(pady=5, padx=20, fill=tk.X)
         
         path2_var = tk.StringVar()
-        if saved_config and saved_config.get('auto_save_folder'):
-            path2_var.set(saved_config['auto_save_folder'])
+        if saved_paths and saved_paths.get('excel_path_2'):
+            path2_var.set(saved_paths['excel_path_2'])
         
-        path2_entry = tk.Entry(input_frame2, textvariable=path2_var, width=50, 
+        path2_entry = tk.Entry(input_frame2, textvariable=path2_var, width=60, 
                               font=('Arial', 10), relief=tk.SOLID, bd=1,
                               bg='#FFFFFF', fg='#000000', insertbackground='#000000')
         path2_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
-        def browse_folder2():
-            folder = filedialog.askdirectory(title="Chọn thư mục lưu file bí mật")
-            if folder:
-                path2_var.set(folder)
+        def browse_file2():
+            file_path = filedialog.asksaveasfilename(
+                title="Chọn hoặc tạo file Excel 2",
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                initialfile="Kiemkecuoinam.xlsx"
+            )
+            if file_path:
+                path2_var.set(file_path)
         
-        browse2_btn = tk.Button(input_frame2, text="Chọn thư mục", command=browse_folder2,
+        browse2_btn = tk.Button(input_frame2, text="Chọn file", command=browse_file2,
                                bg='#C8E6C9', fg='#000000', font=('Arial', 9, 'bold'), 
                                relief=tk.RAISED, bd=2, padx=12, pady=4,
                                activebackground='#A5D6A7', activeforeground='#000000',
@@ -240,45 +194,51 @@ class KiemKhoApp:
         button_frame.pack(pady=20)
         
         def on_ok():
-            template_path = path1_var.get().strip()
-            folder_path = path2_var.get().strip()
+            path1 = path1_var.get().strip()
+            path2 = path2_var.get().strip()
             
-            if not template_path or not folder_path:
-                messagebox.showwarning("Cảnh báo", "Vui lòng nhập đầy đủ 2 đường dẫn!")
+            if not path1 or not path2:
+                messagebox.showwarning("Cảnh báo", "Vui lòng nhập đầy đủ 2 đường dẫn file Excel!")
                 return
             
-            # Kiểm tra file Excel có tồn tại không
-            if not os.path.isfile(template_path):
-                messagebox.showerror("Lỗi", f"File Excel không tồn tại!\n{template_path}")
+            # Kiểm tra thư mục chứa file có tồn tại không
+            path1_dir = os.path.dirname(path1)
+            path2_dir = os.path.dirname(path2)
+            
+            if not os.path.isdir(path1_dir):
+                messagebox.showerror("Lỗi", f"Thư mục chứa file Excel 1 không tồn tại!\n{path1_dir}")
                 return
             
-            # Kiểm tra thư mục có tồn tại không
-            if not os.path.isdir(folder_path):
-                messagebox.showerror("Lỗi", f"Thư mục không tồn tại!\n{folder_path}")
+            if not os.path.isdir(path2_dir):
+                messagebox.showerror("Lỗi", f"Thư mục chứa file Excel 2 không tồn tại!\n{path2_dir}")
                 return
             
             # Kiểm tra quyền ghi vào thư mục
             try:
-                test_file = os.path.join(folder_path, '.kiem_kho_test')
-                with open(test_file, 'w') as f:
+                test_file1 = os.path.join(path1_dir, '.kiem_kho_test')
+                test_file2 = os.path.join(path2_dir, '.kiem_kho_test')
+                with open(test_file1, 'w') as f:
                     f.write('test')
-                os.remove(test_file)
+                os.remove(test_file1)
+                with open(test_file2, 'w') as f:
+                    f.write('test')
+                os.remove(test_file2)
             except Exception as e:
                 messagebox.showerror("Lỗi", f"Không có quyền ghi vào thư mục!\n{str(e)}")
                 return
             
             # Lưu cấu hình
-            self.template_file_path = template_path
-            self.auto_save_folder = folder_path
-            self.save_config(template_path, folder_path)
+            self.excel_path_1 = path1
+            self.excel_path_2 = path2
+            self.save_config(path1, path2)
             dialog.destroy()
         
         def on_cancel():
             # Nếu không nhập đầy đủ và bấm "Bỏ qua", tắt phần mềm
-            template_path = path1_var.get().strip()
-            folder_path = path2_var.get().strip()
-            if not template_path or not folder_path:
-                messagebox.showinfo("Thông báo", "Phần mềm sẽ đóng vì chưa cấu hình đầy đủ đường dẫn.")
+            path1 = path1_var.get().strip()
+            path2 = path2_var.get().strip()
+            if not path1 or not path2:
+                messagebox.showinfo("Thông báo", "Phần mềm sẽ đóng vì chưa cấu hình đường dẫn file Excel.")
                 self.root.quit()
                 sys.exit(0)
             else:
@@ -571,16 +531,8 @@ class KiemKhoApp:
         label_required_fg = '#C62828'  # Đỏ đậm cho label bắt buộc
         button_bg = '#E3F2FD'  # Nền button xanh nhẹ
         
-        # Tạo Notebook để chứa các tab
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # === TAB 1: KIỂM KÊ ===
-        tab_kiemke = tk.Frame(self.notebook, bg=bg_color)
-        self.notebook.add(tab_kiemke, text="Kiểm kê")
-        
-        # Frame chính cho tab Kiểm kê
-        main_frame = tk.Frame(tab_kiemke, bg=bg_color)
+        # Frame chính
+        main_frame = tk.Frame(self.root, bg=bg_color)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # === PHẦN NHẬP THÔNG TIN THÙNG ===
@@ -626,12 +578,12 @@ class KiemKhoApp:
                          fg=input_fg, font=('Arial', 10), relief=tk.SOLID, bd=1, insertbackground='#000000')
         entry3.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky='ew')
         
-        # Tổ (*) - Bắt buộc
-        tk.Label(info_frame, text="Tổ (*):", bg=bg_color, fg=label_required_fg, font=('Arial', 11, 'bold')).grid(row=3, column=0, sticky='w', padx=5, pady=5)
+        # Tổ
+        tk.Label(info_frame, text="Tổ:", bg=bg_color, fg=label_fg, font=('Arial', 11)).grid(row=3, column=0, sticky='w', padx=5, pady=5)
         self.to_var = tk.StringVar()
-        self.to_entry = tk.Entry(info_frame, textvariable=self.to_var, width=40, bg=input_bg_yellow,
+        entry4 = tk.Entry(info_frame, textvariable=self.to_var, width=40, bg=input_bg_yellow,
                           fg=input_fg, font=('Arial', 10), relief=tk.SOLID, bd=1, insertbackground='#000000')
-        self.to_entry.grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky='ew')
+        entry4.grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky='ew')
         
         # Note thùng
         tk.Label(info_frame, text="Note thùng:", bg=bg_color, fg=label_required_fg, font=('Arial', 11, 'bold')).grid(row=4, column=0, sticky='w', padx=5, pady=5)
@@ -747,66 +699,6 @@ class KiemKhoApp:
         self.isbn_entry.focus()
         
         scan_frame.columnconfigure(1, weight=1)
-        
-        # === TAB 2: TỔNG HỢP ===
-        tab_tonghop = tk.Frame(self.notebook, bg=bg_color)
-        self.notebook.add(tab_tonghop, text="Tổng hợp")
-        
-        # Frame chính cho tab Tổng hợp
-        tonghop_main_frame = tk.Frame(tab_tonghop, bg=bg_color)
-        tonghop_main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Tiêu đề
-        title_frame = tk.Frame(tonghop_main_frame, bg=bg_color)
-        title_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        title_label = tk.Label(title_frame, text="TỔNG HỢP DỮ LIỆU NHẬP", 
-                              bg=bg_color, fg='#000000', font=('Arial', 16, 'bold'))
-        title_label.pack()
-        
-        # Nút Tải file excel tổng hợp
-        button_frame = tk.Frame(tonghop_main_frame, bg=bg_color)
-        button_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        export_btn = tk.Button(button_frame, text="Tải file excel tổng hợp", 
-                              command=self.export_tong_hop_excel,
-                              bg='#4CAF50', fg='white', font=('Arial', 12, 'bold'), 
-                              width=25, height=2, relief=tk.RAISED, bd=2, cursor='hand2')
-        export_btn.pack(side=tk.RIGHT, padx=10)
-        
-        # Bảng tổng hợp
-        tonghop_table_frame = tk.Frame(tonghop_main_frame, bg=bg_color)
-        tonghop_table_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Scrollbar cho bảng tổng hợp
-        tonghop_scrollbar_y = tk.Scrollbar(tonghop_table_frame, orient=tk.VERTICAL, bg='#E0E0E0', troughcolor=bg_color)
-        tonghop_scrollbar_x = tk.Scrollbar(tonghop_table_frame, orient=tk.HORIZONTAL, bg='#E0E0E0', troughcolor=bg_color)
-        
-        # Cột cho bảng tổng hợp
-        tonghop_columns = ('N/X', 'Số phiếu', 'Ngày', 'Vị trí mới', 'ISBN', 'Tựa', 'Tồn thực tế', 'Số thùng', 'Ghi chú')
-        
-        # Tạo Treeview cho tổng hợp
-        self.tong_hop_tree = ttk.Treeview(tonghop_table_frame, columns=tonghop_columns, show='headings', 
-                                          yscrollcommand=tonghop_scrollbar_y.set, xscrollcommand=tonghop_scrollbar_x.set,
-                                          height=20, style='Treeview')
-        
-        # Cấu hình các cột
-        column_widths = {'N/X': 250, 'Số phiếu': 120, 'Ngày': 100, 'Vị trí mới': 120, 'ISBN': 150, 
-                        'Tựa': 250, 'Tồn thực tế': 100, 'Số thùng': 120, 'Ghi chú': 200}
-        
-        for col in tonghop_columns:
-            self.tong_hop_tree.heading(col, text=col)
-            self.tong_hop_tree.column(col, width=column_widths.get(col, 100), anchor='w')
-        
-        tonghop_scrollbar_y.config(command=self.tong_hop_tree.yview)
-        tonghop_scrollbar_x.config(command=self.tong_hop_tree.xview)
-        
-        self.tong_hop_tree.grid(row=0, column=0, sticky='nsew')
-        tonghop_scrollbar_y.grid(row=0, column=1, sticky='ns')
-        tonghop_scrollbar_x.grid(row=1, column=0, sticky='ew')
-        
-        tonghop_table_frame.grid_rowconfigure(0, weight=1)
-        tonghop_table_frame.grid_columnconfigure(0, weight=1)
     
     def get_all_box_numbers(self):
         """Lấy danh sách tất cả mã thùng từ dữ liệu đầu vào"""
@@ -1525,132 +1417,66 @@ class KiemKhoApp:
             self.on_isbn_entered()
     
     def save_data(self):
-        """Lưu dữ liệu đã kiểm tra vào tab Tổng hợp"""
+        """Lưu dữ liệu đã kiểm tra"""
         if not self.scanned_items:
-            messagebox.showwarning("Cảnh báo", "Chưa có dữ liệu để lưu!")
+            messagebox.showwarning("Cảnh báo", "Chưa có dữ liệu nào để lưu!")
             return
         
-        # Kiểm tra ràng buộc: Tổ là bắt buộc
-        to_value = self.to_var.get().strip() if hasattr(self, 'to_var') and self.to_var.get() else ''
-        if not to_value:
-            messagebox.showerror("Lỗi", "Vui lòng nhập 'Tổ' trước khi lưu!")
-            # Focus vào ô input Tổ
-            if hasattr(self, 'to_entry'):
-                self.to_entry.focus()
-                self.to_entry.select_range(0, tk.END)
-            return
+        # Lấy giá trị "Thùng / vị trí mới" hiện tại từ ô input (áp dụng cho tất cả items nếu có)
+        vi_tri_moi_global = self.vi_tri_moi_var.get().strip()
         
-        # Lấy giá trị từ các input
-        vi_tri_moi_global = self.vi_tri_moi_var.get().strip() if hasattr(self, 'vi_tri_moi_var') else ''
-        ngay_value = self.ngay_var.get().strip() if hasattr(self, 'ngay_var') else ''
-        nhap_xuat_value = self.nhap_xuat_var.get().strip() if hasattr(self, 'nhap_xuat_var') else ''
-        
-        # Tạo số phiếu theo format P-DD/MM/YYYY
-        from datetime import datetime
-        try:
-            if ngay_value:
-                # Parse ngày từ format DD/MM/YY hoặc DD/MM/YYYY
-                if len(ngay_value.split('/')) == 3:
-                    parts = ngay_value.split('/')
-                    if len(parts[2]) == 2:
-                        # Format DD/MM/YY -> DD/MM/YYYY
-                        parts[2] = '20' + parts[2]
-                    ngay_parsed = datetime.strptime('/'.join(parts), "%d/%m/%Y")
-                else:
-                    ngay_parsed = datetime.now()
-            else:
-                ngay_parsed = datetime.now()
-        except:
-            ngay_parsed = datetime.now()
-        
-        so_phieu = f"P-{ngay_parsed.strftime('%d/%m/%Y')}"
-        
-        # Thêm dữ liệu vào tổng hợp
+        # Tạo DataFrame từ scanned_items
+        save_data = []
         for isbn, info in self.scanned_items.items():
-            # Lấy số thùng gốc
+            # Lấy số thùng gốc (từ dữ liệu đầu vào) - luôn giữ nguyên
             so_thung_goc = info.get('so_thung_goc', '')
+            
+            # Nếu không có so_thung_goc, thử lấy từ current_box_number (số thùng đã load)
             if not so_thung_goc:
                 so_thung_goc = self.current_box_number if self.current_box_number else info.get('so_thung', '')
+            
             so_thung_goc_clean = str(so_thung_goc).strip()
             
-            # Xác định số thùng mới
+            # Xác định số thùng mới theo thứ tự ưu tiên:
+            # 1. Giá trị từ ô "Thùng / vị trí mới" hiện tại (nếu có và khác số thùng gốc)
+            # 2. Giá trị vi_tri_moi đã lưu khi quét ISBN (nếu có và khác số thùng gốc)
+            # 3. Giá trị so_thung_hien_thi nếu đã chỉnh sửa trực tiếp và khác số thùng gốc
+            
             so_thung_moi = ''
+            
+            # Ưu tiên 1: Giá trị từ ô input hiện tại
             if vi_tri_moi_global and vi_tri_moi_global != so_thung_goc_clean:
                 so_thung_moi = vi_tri_moi_global
             else:
+                # Ưu tiên 2: Giá trị đã lưu khi quét ISBN
                 vi_tri_moi_saved = info.get('vi_tri_moi', '').strip()
                 if vi_tri_moi_saved and vi_tri_moi_saved != so_thung_goc_clean:
                     so_thung_moi = vi_tri_moi_saved
                 else:
+                    # Ưu tiên 3: Giá trị đã chỉnh sửa trực tiếp trong bảng
                     so_thung_hien_thi = info.get('so_thung', so_thung_goc)
                     so_thung_hien_thi_clean = str(so_thung_hien_thi).strip()
                     if so_thung_hien_thi_clean != so_thung_goc_clean and so_thung_hien_thi_clean:
                         so_thung_moi = so_thung_hien_thi_clean
             
-            # Lấy giá trị từ input "Nhập/Xuất" ở tab Kiểm kê và hiển thị trực tiếp vào cột N/X
-            nx_value = nhap_xuat_value.strip() if nhap_xuat_value else ""
-            
-            # Thêm vào tổng hợp
-            self.tong_hop_data.append({
-                'N/X': nx_value,
-                'Số phiếu': so_phieu,
-                'Ngày': ngay_value,
-                'Vị trí mới': so_thung_moi if so_thung_moi else so_thung_goc_clean,
+            save_data.append({
                 'ISBN': isbn,
                 'Tựa': info['tua'],
                 'Tồn thực tế': info['ton_thuc_te'],
-                'Số thùng': so_thung_goc_clean,
+                'Số thùng': so_thung_goc_clean,  # Số thùng gốc từ dữ liệu đầu vào
+                'Số thùng mới': so_thung_moi,  # Số thùng mới (nếu có)
+                'Tồn tựa trong thùng': info['ton_trong_thung'],
                 'Ghi chú': info['ghi_chu']
             })
         
-        # Cập nhật bảng tổng hợp
-        self.update_tong_hop_table()
-        
-        # Xóa dữ liệu đã quét
-        self.scanned_items.clear()
-        self.clear_table()
-        self.so_tua_var.set("0")
-        
-        # Chuyển sang tab Tổng hợp
-        self.notebook.select(1)
-        
-        messagebox.showinfo("Thành công", f"Đã lưu {len(self.tong_hop_data)} dòng vào Tổng hợp!")
-    
-    def update_tong_hop_table(self):
-        """Cập nhật bảng tổng hợp"""
-        # Xóa tất cả items cũ
-        for item in self.tong_hop_tree.get_children():
-            self.tong_hop_tree.delete(item)
-        
-        # Thêm dữ liệu mới
-        for data in self.tong_hop_data:
-            self.tong_hop_tree.insert('', 'end', values=(
-                data.get('N/X', ''),
-                data.get('Số phiếu', ''),
-                data.get('Ngày', ''),
-                data.get('Vị trí mới', ''),
-                data.get('ISBN', ''),
-                data.get('Tựa', ''),
-                data.get('Tồn thực tế', ''),
-                data.get('Số thùng', ''),
-                data.get('Ghi chú', '')
-            ))
-    
-    def export_tong_hop_excel(self):
-        """Xuất file Excel tổng hợp (logic giống save_data cũ)"""
-        if not self.tong_hop_data:
-            messagebox.showwarning("Cảnh báo", "Chưa có dữ liệu tổng hợp để xuất!")
-            return
-        
-        # Tạo DataFrame từ tổng hợp data
-        df_save = pd.DataFrame(self.tong_hop_data)
+        df_save = pd.DataFrame(save_data)
         
         # Tạo tên file theo format
         from datetime import datetime
         ngay_hien_tai = datetime.now().strftime("%d/%m/%Y")
-        to_value = self.to_var.get().strip() if hasattr(self, 'to_var') and self.to_var.get() else ""
+        to_value = self.to_var.get().strip() if self.to_var.get() else ""
         
-        # Thay thế ký tự không hợp lệ trong tên file
+        # Thay thế ký tự không hợp lệ trong tên file (/, \, :, *, ?, ", <, >, |)
         to_safe = to_value.replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
         ngay_safe = ngay_hien_tai.replace('/', '_')
         
@@ -1660,14 +1486,8 @@ class KiemKhoApp:
         # File 2: Kiemkecuoinam_dd/mm/yyyy_Tổ.xlsx (file ngầm)
         ten_file_2 = f"Kiemkecuoinam_{ngay_safe}_{to_safe}.xlsx" if to_safe else f"Kiemkecuoinam_{ngay_safe}.xlsx"
         
-        # Kiểm tra có cấu hình đầy đủ không
-        if not self.template_file_path or not os.path.exists(self.template_file_path):
-            messagebox.showerror("Lỗi", "Chưa cấu hình file Excel cố định! Vui lòng cấu hình lại.")
-            return
-        
-        # Cho phép người dùng chọn đường dẫn để lưu file
+        # Cho phép người dùng chọn nơi lưu file 1
         filename = filedialog.asksaveasfilename(
-            title="Chọn đường dẫn để lưu file Excel tổng hợp",
             defaultextension=".xlsx",
             filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
             initialfile=ten_file_1
@@ -1675,64 +1495,38 @@ class KiemKhoApp:
         
         if filename:
             try:
-                # File 1: Chỉ copy file template từ đường dẫn đã cấu hình và đổi tên (KHÔNG ghi đè data)
-                shutil.copy2(self.template_file_path, filename)
-                # KHÔNG ghi đè dữ liệu vào file 1 - giữ nguyên data từ template
+                # Lưu file 1 (do người dùng chọn) - Kiemke_dd/mm/yyyy_Tổ.xlsx
+                df_save.to_excel(filename, index=False)
                 
-                # File 2: Tự động lưu vào thư mục đã cấu hình (nếu có)
-                if self.auto_save_folder:
+                # File 2: Tự động lưu vào đường dẫn đã cấu hình (nếu có)
+                if self.excel_path_2:
                     try:
                         # Tạo đường dẫn file 2 với tên file đúng format
-                        file2_path = os.path.join(self.auto_save_folder, ten_file_2)
+                        # Lấy thư mục từ đường dẫn đã cấu hình và thêm tên file mới
+                        path2_dir = os.path.dirname(self.excel_path_2)
+                        file2_path = os.path.join(path2_dir, ten_file_2)
                         
-                        # Lưu file 2 với data tổng hợp (ngầm, không hiển thị thông báo)
+                        # Lưu file 2 (ngầm, không hiển thị thông báo)
                         df_save.to_excel(file2_path, index=False)
                         
                         # Hiển thị thông báo thành công (chỉ đề cập file 1)
-                        messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp vào {filename}")
+                        messagebox.showinfo("Thành công", f"Đã lưu dữ liệu vào {filename}")
                     except Exception as e2:
                         # Nếu lỗi khi lưu file 2, chỉ log lỗi nhưng không hiển thị cho người dùng
                         print(f"Lỗi khi lưu file tự động: {str(e2)}")
                         # Vẫn hiển thị thành công cho file 1
-                        messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp vào {filename}")
+                        messagebox.showinfo("Thành công", f"Đã lưu dữ liệu vào {filename}")
                 else:
-                    # Không có thư mục tự động, chỉ lưu file 1
-                    messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp vào {filename}")
+                    # Không có đường dẫn file 2, chỉ lưu file 1
+                    messagebox.showinfo("Thành công", f"Đã lưu dữ liệu vào {filename}")
                     
             except Exception as e:
                 messagebox.showerror("Lỗi", f"Không thể lưu file: {str(e)}")
 
 def main():
-    try:
-        root = tk.Tk()
-        # Đảm bảo root window được hiển thị ngay từ đầu
-        root.deiconify()
-        root.update()
-        
-        app = KiemKhoApp(root)
-        
-        # Kiểm tra xem app đã được khởi tạo thành công chưa
-        if not hasattr(app, 'template_file_path') or not app.template_file_path:
-            print("App không được khởi tạo đúng cách")
-            root.quit()
-            return
-        
-        root.mainloop()
-    except Exception as e:
-        # Hiển thị lỗi nếu có
-        import traceback
-        error_msg = f"Lỗi khi khởi động ứng dụng:\n{str(e)}\n\n{traceback.format_exc()}"
-        print(error_msg)
-        try:
-            # Tạo một root window mới để hiển thị lỗi
-            error_root = tk.Tk()
-            error_root.withdraw()  # Ẩn window chính
-            messagebox.showerror("Lỗi", f"Lỗi khi khởi động ứng dụng:\n{str(e)}")
-            error_root.destroy()
-        except:
-            # Nếu không thể hiển thị messagebox, in ra console
-            print("Không thể hiển thị dialog lỗi")
-            print(error_msg)
+    root = tk.Tk()
+    app = KiemKhoApp(root)
+    root.mainloop()
 
 if __name__ == "__main__":
     main()

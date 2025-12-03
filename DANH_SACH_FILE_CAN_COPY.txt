@@ -1,0 +1,52 @@
+═══════════════════════════════════════════════════════════════
+   DANH SÁCH FILE CẦN COPY SANG MÁY WINDOWS
+═══════════════════════════════════════════════════════════════
+
+PHƯƠNG ÁN 1: COPY TOÀN BỘ THƯ MỤC (KHUYẾN NGHỊ)
+───────────────────────────────────────────────────────────────
+
+Copy toàn bộ thư mục này sang máy Windows, sau đó:
+→ Double-click vào file: CHAY_TREN_WINDOWS.bat
+
+
+PHƯƠNG ÁN 2: CHỈ COPY FILE CẦN THIẾT
+───────────────────────────────────────────────────────────────
+
+Các file BẮT BUỘC phải có:
+───────────────────────────────────────────────────────────────
+✓ kiem_kho_app.py              - File chính của ứng dụng
+✓ DuLieuDauVao.xlsx            - File dữ liệu Excel (BẮT BUỘC)
+✓ CHAY_TREN_WINDOWS.bat        - Script tự động cài đặt và chạy
+✓ requirements.txt             - Danh sách thư viện cần thiết
+
+
+Các file TÙY CHỌN (hữu ích):
+───────────────────────────────────────────────────────────────
+○ HUONG_DAN_WINDOWS.txt        - Hướng dẫn chi tiết
+○ DANH_SACH_FILE_CAN_COPY.txt  - File này
+○ TAO_FILE_EXE_WINDOWS.bat     - Để tạo file .exe (nếu cần)
+
+
+PHƯƠNG ÁN 3: TẠO FILE .EXE (CHẠY KHÔNG CẦN PYTHON)
+───────────────────────────────────────────────────────────────
+
+Nếu muốn tạo file .exe để chạy không cần cài Python:
+
+1. Trên máy có Python, chạy: TAO_FILE_EXE_WINDOWS.bat
+
+2. Copy các file sau sang máy Windows:
+   ✓ dist\KiemKhoApp.exe        - File thực thi
+   ✓ dist\DuLieuDauVao.xlsx     - File dữ liệu Excel
+
+3. Đặt cả 2 file vào cùng một thư mục và double-click KiemKhoApp.exe
+
+
+CÁCH SỬ DỤNG NHANH NHẤT
+───────────────────────────────────────────────────────────────
+
+1. Copy toàn bộ thư mục này sang máy Windows
+2. Double-click vào: CHAY_TREN_WINDOWS.bat
+3. Xong! Ứng dụng sẽ tự động cài đặt và chạy
+
+═══════════════════════════════════════════════════════════════
+

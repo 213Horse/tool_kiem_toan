@@ -1,0 +1,69 @@
+═══════════════════════════════════════════════════════════════
+   HƯỚNG DẪN SỬA LỖI KHI CHẠY CHAY_TREN_WINDOWS.bat
+═══════════════════════════════════════════════════════════════
+
+VẤN ĐỀ: File CHAY_TREN_WINDOWS.bat báo lỗi khi chạy
+───────────────────────────────────────────────────────────────
+
+NGUYÊN NHÂN:
+- Lỗi encoding (ký tự tiếng Việt không hiển thị đúng)
+- Lỗi cú pháp trong file batch
+- Thiếu file cần thiết
+
+GIẢI PHÁP:
+───────────────────────────────────────────────────────────────
+
+CÁCH 1: Dùng file CHAY_TREN_WINDOWS_SIMPLE.bat (KHUYẾN NGHỊ)
+───────────────────────────────────────────────────────────────
+1. Copy file CHAY_TREN_WINDOWS_SIMPLE.bat sang máy Windows
+2. Double-click vào file này
+3. File này không dùng ký tự tiếng Việt nên sẽ không bị lỗi encoding
+
+
+CÁCH 2: Sửa file CHAY_TREN_WINDOWS.bat
+───────────────────────────────────────────────────────────────
+1. Mở file CHAY_TREN_WINDOWS.bat bằng Notepad
+2. File > Save As
+3. Chọn Encoding: UTF-8
+4. Save lại
+
+
+CÁCH 3: Chạy thủ công từ Command Prompt
+───────────────────────────────────────────────────────────────
+1. Mở Command Prompt (cmd)
+2. Di chuyển đến thư mục chứa file:
+   cd "C:\duong\dan\den\thu\muc"
+3. Chạy các lệnh sau:
+   
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   python kiem_kho_app.py
+
+
+CÁC FILE CẦN COPY (TỐI THIỂU)
+───────────────────────────────────────────────────────────────
+✓ kiem_kho_app.py
+✓ DuLieuDauVao.xlsx
+✓ requirements.txt
+✓ CHAY_TREN_WINDOWS_SIMPLE.bat  (hoặc CHAY_TREN_WINDOWS.bat)
+
+KHÔNG CẦN COPY:
+✗ build_windows.bat  (chỉ dùng để build file .exe, không cần để chạy)
+
+
+KIỂM TRA LỖI
+───────────────────────────────────────────────────────────────
+Nếu vẫn gặp lỗi, kiểm tra:
+
+1. Python đã được cài đặt chưa?
+   → Mở Command Prompt, gõ: python --version
+   → Nếu báo lỗi, cần cài Python
+
+2. File có trong cùng thư mục không?
+   → Kiểm tra: kiem_kho_app.py, DuLieuDauVao.xlsx, requirements.txt
+
+3. Có quyền Administrator không?
+   → Thử chạy Command Prompt as Administrator
+
+═══════════════════════════════════════════════════════════════
+

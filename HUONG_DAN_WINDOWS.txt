@@ -1,0 +1,72 @@
+═══════════════════════════════════════════════════════════════
+   HƯỚNG DẪN CÀI ĐẶT VÀ CHẠY TRÊN WINDOWS
+═══════════════════════════════════════════════════════════════
+
+CÁCH 1: TỰ ĐỘNG CÀI ĐẶT VÀ CHẠY (KHUYẾN NGHỊ)
+───────────────────────────────────────────────────────────────
+
+1. Copy toàn bộ thư mục này sang máy Windows
+
+2. Double-click vào file: CHAY_TREN_WINDOWS.bat
+
+3. Script sẽ tự động:
+   ✓ Kiểm tra Python đã cài chưa
+   ✓ Cài đặt các thư viện cần thiết
+   ✓ Chạy ứng dụng
+
+LƯU Ý: Nếu chưa có Python, script sẽ báo lỗi và hướng dẫn tải Python.
+
+
+CÁCH 2: CÀI ĐẶT PYTHON THỦ CÔNG (NẾU CẦN)
+───────────────────────────────────────────────────────────────
+
+1. Tải Python từ: https://www.python.org/downloads/
+   - Chọn phiên bản Python 3.8 trở lên
+   - Khi cài đặt, NHỚ CHỌN "Add Python to PATH"
+
+2. Sau khi cài Python xong, chạy lại file CHAY_TREN_WINDOWS.bat
+
+
+CÁCH 3: TẠO FILE THỰC THI (.EXE) - CHẠY KHÔNG CẦN PYTHON
+───────────────────────────────────────────────────────────────
+
+Nếu muốn tạo file .exe để chạy không cần Python:
+
+1. Mở Command Prompt hoặc PowerShell
+
+2. Chạy lệnh:
+   build_windows.bat
+
+3. File .exe sẽ nằm trong thư mục: dist\KiemKhoApp.exe
+
+4. Copy file .exe và file DuLieuDauVao.xlsx sang máy Windows khác
+   và double-click để chạy
+
+
+CÁC FILE CẦN THIẾT
+───────────────────────────────────────────────────────────────
+
+✓ kiem_kho_app.py          - File chính của ứng dụng
+✓ DuLieuDauVao.xlsx        - File dữ liệu Excel (BẮT BUỘC)
+✓ CHAY_TREN_WINDOWS.bat    - Script tự động cài đặt và chạy
+✓ requirements.txt         - Danh sách thư viện cần thiết
+
+
+YÊU CẦU HỆ THỐNG
+───────────────────────────────────────────────────────────────
+
+- Windows 7 trở lên
+- Python 3.8 trở lên (nếu dùng cách 1 hoặc 2)
+- Kết nối Internet để tải thư viện (lần đầu chạy)
+
+
+HỖ TRỢ
+───────────────────────────────────────────────────────────────
+
+Nếu gặp lỗi, vui lòng kiểm tra:
+1. Python đã được cài đặt và thêm vào PATH chưa
+2. File DuLieuDauVao.xlsx có trong cùng thư mục không
+3. Có quyền Administrator để cài đặt thư viện không
+
+═══════════════════════════════════════════════════════════════
+

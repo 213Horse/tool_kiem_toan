@@ -1,0 +1,65 @@
+═══════════════════════════════════════════════════════════════
+   HƯỚNG DẪN TẠO VÀ CHẠY FILE .EXE TRÊN WINDOWS
+═══════════════════════════════════════════════════════════════
+
+BƯỚC 1: BUILD FILE .EXE (Trên máy Windows có Python)
+───────────────────────────────────────────────────────────────
+
+Các file cần copy để BUILD file .exe:
+───────────────────────────────────────────────────────────────
+✓ kiem_kho_app.py              - File chính của ứng dụng
+✓ DuLieuDauVao.xlsx            - File dữ liệu Excel (BẮT BUỘC)
+✓ requirements.txt             - Danh sách thư viện cần thiết
+✓ SUA_LOI_BUILD.bat            - Script build file .exe (KHUYẾN NGHỊ)
+   HOẶC
+✓ TAO_FILE_EXE_WINDOWS.bat     - Script build file .exe
+   HOẶC
+✓ build_windows.bat            - Script build file .exe
+
+Cách thực hiện:
+1. Copy tất cả các file trên vào cùng một thư mục trên máy Windows có Python
+2. Double-click vào SUA_LOI_BUILD.bat (hoặc TAO_FILE_EXE_WINDOWS.bat)
+3. Đợi quá trình build hoàn tất (có thể mất vài phút)
+4. File .exe sẽ nằm trong thư mục: dist\KiemKhoApp.exe
+
+
+BƯỚC 2: COPY FILE .EXE SANG MÁY WINDOWS KHÁC (Để chạy)
+───────────────────────────────────────────────────────────────
+
+Sau khi build xong, copy 2 file sau sang máy Windows khác:
+───────────────────────────────────────────────────────────────
+✓ dist\KiemKhoApp.exe          - File thực thi (đã build sẵn)
+✓ dist\DuLieuDauVao.xlsx       - File dữ liệu Excel
+
+Cách sử dụng:
+1. Copy cả 2 file trên vào cùng một thư mục trên máy Windows khác
+2. Double-click vào KiemKhoApp.exe để chạy
+3. KHÔNG CẦN cài Python hay bất kỳ thư viện nào!
+
+
+TÓM TẮT NHANH
+───────────────────────────────────────────────────────────────
+
+Để có file .exe chạy trên Windows:
+
+1. TRÊN MÁY CÓ PYTHON:
+   → Copy: kiem_kho_app.py, DuLieuDauVao.xlsx, requirements.txt, SUA_LOI_BUILD.bat
+   → Chạy: SUA_LOI_BUILD.bat
+   → Kết quả: dist\KiemKhoApp.exe
+
+2. TRÊN MÁY WINDOWS KHÁC (KHÔNG CẦN PYTHON):
+   → Copy: dist\KiemKhoApp.exe, dist\DuLieuDauVao.xlsx
+   → Chạy: Double-click KiemKhoApp.exe
+   → Xong!
+
+
+LƯU Ý QUAN TRỌNG
+───────────────────────────────────────────────────────────────
+
+✓ File .exe sẽ lớn (khoảng 50-100MB) vì đã bao gồm đầy đủ thư viện
+✓ Không cần cài Python trên máy Windows khác khi dùng file .exe
+✓ Đảm bảo file DuLieuDauVao.xlsx cùng thư mục với file .exe
+✓ Nếu file .exe báo lỗi "No module named 'pandas'", cần build lại với SUA_LOI_BUILD.bat
+
+═══════════════════════════════════════════════════════════════
+

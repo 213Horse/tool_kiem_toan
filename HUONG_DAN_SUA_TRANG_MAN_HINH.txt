@@ -1,0 +1,49 @@
+═══════════════════════════════════════════════════════════════
+   HUONG DAN SUA LOI TRANG MAN HINH TREN WINDOWS
+═══════════════════════════════════════════════════════════════
+
+Khi file .exe chay bi trang man hinh, thu lam theo cac buoc sau:
+
+BUOC 1: BUILD LAI VOI VERSION DEBUG
+───────────────────────────────────────────────────────────────
+1. Giai nen file zip
+2. Chay file: BUILD_EXE_DEBUG.bat
+   (File nay se build version co console de xem loi)
+3. Sau khi build xong, chay file: dist\KiemKhoApp.exe
+4. Console window se hien thi loi (neu co)
+5. Copy toan bo noi dung loi va gui lai
+
+BUOC 2: KIEM TRA FILE CAN THIET
+───────────────────────────────────────────────────────────────
+Dam bao co cac file sau cung thu muc voi .exe:
+- DuLieuDauVao.xlsx
+- Kiemke_template.xlsx (neu can)
+
+BUOC 3: CHAY TRUC TIEP VOI PYTHON
+───────────────────────────────────────────────────────────────
+Neu .exe khong chay duoc, thu chay truc tiep:
+1. Chay file: CHAY_TREN_WINDOWS_SIMPLE.bat
+2. Xem loi trong console
+3. Copy loi va gui lai
+
+BUOC 4: KIEM TRA PYTHON
+───────────────────────────────────────────────────────────────
+Neu chay truc tiep cung khong duoc:
+1. Mo Command Prompt
+2. Chay lenh: python --version
+3. Neu khong co Python, cai dat tu: https://www.python.org/downloads/
+4. Khi cai dat, nho chon "Add Python to PATH"
+
+BUOC 5: CAI DAT THU VIEN
+───────────────────────────────────────────────────────────────
+1. Mo Command Prompt trong thu muc ung dung
+2. Chay lenh: pip install -r requirements.txt
+3. Hoac chay: pip install pandas openpyxl xlrd tkinter
+
+LUU Y:
+- Neu dung BUILD_EXE_DEBUG.bat, console window se hien thi loi
+- Neu dung BUILD_EXE_SIMPLE.bat, khong co console (nen kho debug)
+- Luon dung BUILD_EXE_DEBUG.bat khi gap van de
+
+═══════════════════════════════════════════════════════════════
+
