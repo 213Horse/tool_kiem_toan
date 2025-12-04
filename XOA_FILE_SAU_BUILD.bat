@@ -156,3 +156,4 @@ echo Ban co the copy file .exe ra bat ky dau de su dung!
 echo.
 pause
 
+

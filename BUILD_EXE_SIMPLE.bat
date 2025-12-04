@@ -68,9 +68,14 @@ echo.
 echo Building, please wait (may take a few minutes)...
 echo.
 
+REM Tạo file config tạm thời TRƯỚC KHI build (sẽ được cập nhật sau)
+echo # File này được tạo tự động khi build exe > dist_path_config.py
+echo # Chứa đường dẫn thư mục dist gốc >> dist_path_config.py
+echo DIST_PATH = None  # Sẽ được cập nhật sau khi build >> dist_path_config.py
+
 pyinstaller --onefile --windowed --name "KiemKhoApp" ^
-    --add-data "DuLieuDauVao.xlsx;." ^
     --add-data "Kiemke_template.xlsx;." ^
+    --add-data "dist_path_config.py;." ^
     --hidden-import pandas ^
     --hidden-import openpyxl ^
     --hidden-import xlrd ^
@@ -100,6 +105,19 @@ if exist "DuLieuDauVao.xlsx" (
     if not exist "dist" mkdir dist
     copy "DuLieuDauVao.xlsx" "dist\" >nul
     echo [OK] Copied Excel file to dist folder
+)
+
+REM Cập nhật file config với đường dẫn chính xác sau khi build
+REM File này đã được đóng gói vào exe, không cần copy vào thư mục dist
+if exist "dist" (
+    for %%I in (dist) do set DIST_PATH_FINAL=%%~fI
+    echo # File này được tạo tự động khi build exe > dist_path_config.py
+    echo # Chứa đường dẫn thư mục dist gốc >> dist_path_config.py
+    echo DIST_PATH = r"%DIST_PATH_FINAL%" >> dist_path_config.py
+    echo [OK] Updated dist_path_config.py with path: %DIST_PATH_FINAL%
+    echo [INFO] Original dist path saved in exe: %DIST_PATH_FINAL%
+    echo [INFO] Application will automatically find this path even if moved to another location
+    echo [INFO] dist folder now contains only: KiemKhoApp.exe and DuLieuDauVao.xlsx
 )
 
 echo.

@@ -100,3 +100,4 @@ echo Bạn có thể copy file .exe sang máy Windows khác và chạy.
 echo.
 pause
 
+

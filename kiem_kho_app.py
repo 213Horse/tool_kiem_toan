@@ -50,32 +50,49 @@ class KiemKhoApp:
         if saved_config:
             template_path = saved_config.get('template_file_path')
             auto_folder = saved_config.get('auto_save_folder')
+            config_folder = saved_config.get('config_folder')
             
-            # Kiểm tra cả 2 đường dẫn có tồn tại không
-            if template_path and auto_folder:
-                if os.path.isfile(template_path) and os.path.isdir(auto_folder):
-                    # Cả 2 đường dẫn đều hợp lệ
-                    self.template_file_path = template_path
-                    self.auto_save_folder = auto_folder
-                else:
-                    # Một trong hai hoặc cả hai đường dẫn không tồn tại
+            # Kiểm tra cả 3 đường dẫn có tồn tại và hợp lệ không
+            if template_path and auto_folder and config_folder:
+                # Windows-safe: Normalize paths và kiểm tra tồn tại
+                try:
+                    template_path_normalized = str(Path(template_path).resolve())
+                    auto_folder_normalized = str(Path(auto_folder).resolve())
+                    config_folder_normalized = str(Path(config_folder).resolve())
+                    
+                    # Kiểm tra tồn tại với normalized paths
+                    if (os.path.isfile(template_path_normalized) and 
+                        os.path.isdir(auto_folder_normalized) and 
+                        os.path.isdir(config_folder_normalized)):
+                        # Cả 3 đường dẫn đều hợp lệ - không cần setup lại
+                        self.template_file_path = template_path_normalized
+                        self.auto_save_folder = auto_folder_normalized
+                        self.config_folder = config_folder_normalized
+                        # Cập nhật config_file để dùng đúng thư mục
+                        self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
+                    else:
+                        # Một hoặc nhiều đường dẫn không tồn tại - cần setup lại
+                        need_setup = True
+                except Exception as e:
+                    # Nếu có lỗi khi normalize (ví dụ: đường dẫn không tồn tại), cần setup lại
+                    print(f"Lỗi khi kiểm tra đường dẫn: {str(e)}")
                     need_setup = True
             else:
-                # Thiếu một trong hai đường dẫn
+                # Thiếu một hoặc nhiều đường dẫn - cần setup lại
                 need_setup = True
         else:
-            # Không có cấu hình
+            # Không có cấu hình - cần setup lần đầu
             need_setup = True
         
-        # Nếu cần cấu hình, hiển thị dialog
+        # Nếu cần cấu hình, hiển thị dialog (chỉ lần đầu hoặc khi config không hợp lệ)
         if need_setup:
             # Đảm bảo root window được hiển thị trước khi tạo dialog
             self.root.deiconify()
             self.root.update()
             self.setup_paths()
             
-            # Sau khi setup xong, kiểm tra lại xem có cấu hình hợp lệ không
-            if not self.template_file_path or not self.auto_save_folder:
+            # Sau khi setup xong, kiểm tra lại xem có cấu hình hợp lệ không (cả 3 đường dẫn)
+            if not self.template_file_path or not self.auto_save_folder or not self.config_folder:
                 # Nếu vẫn không có cấu hình hợp lệ, đóng app
                 self.root.quit()
                 return
@@ -101,103 +118,213 @@ class KiemKhoApp:
         self.root.bind('<Return>', self.on_enter_pressed)
     
     def get_config_file_path(self):
-        """Lấy đường dẫn file config - ưu tiên thư mục do người dùng chọn"""
-        # Nếu đã có config_folder do người dùng chọn, dùng nó
+        """Lấy đường dẫn file config - tìm ở nhiều vị trí để đảm bảo tìm được file đã lưu"""
+        # Nếu đã có config_folder do người dùng chọn, dùng nó (ưu tiên cao nhất)
         if self.config_folder:
             return Path(self.config_folder) / "kiem_kho_config.json"
         
-        # Nếu chưa có, thử load từ file config cũ để lấy config_folder
-        # Luôn lưu trong thư mục dự án (thư mục chứa file source code)
-        # Không lưu theo vị trí application để giấu file config
+        # Tìm file config ở nhiều vị trí để lấy config_folder
+        search_locations = []
+        
         if getattr(sys, 'frozen', False):
-            # Chạy từ executable - tìm thư mục dự án bằng cách tìm thư mục chứa DuLieuDauVao.xlsx
-            # Thử tìm trong thư mục cha của executable (nếu có thư mục dự án)
+            # Chạy từ executable
             exe_dir = Path(sys.executable).parent
-            # Tìm file DuLieuDauVao.xlsx trong thư mục cha hoặc các thư mục lân cận
-            project_dir = None
-            # Thử tìm trong thư mục cha
-            parent_dir = exe_dir.parent
-            if (parent_dir / "DuLieuDauVao.xlsx").exists():
-                project_dir = parent_dir
-            # Nếu không tìm thấy, dùng thư mục hiện tại của user (Desktop hoặc Documents)
-            # Hoặc dùng thư mục chứa executable làm fallback nhưng ẩn file
-            if not project_dir:
-                # Tìm trong thư mục Documents hoặc Desktop
-                user_home = Path.home()
-                for possible_dir in [user_home / "Desktop", user_home / "Documents", user_home]:
-                    if (possible_dir / "DuLieuDauVao.xlsx").exists():
-                        project_dir = possible_dir
-                        break
-                # Nếu vẫn không tìm thấy, dùng thư mục chứa executable
-                if not project_dir:
-                    project_dir = exe_dir
-            config_dir = project_dir
+            search_locations.extend([
+                exe_dir / "kiem_kho_config.json",
+                exe_dir.parent / "kiem_kho_config.json",
+            ])
+            
+            user_home = Path.home()
+            search_locations.extend([
+                user_home / "Desktop" / "kiem_kho_config.json",
+                user_home / "Documents" / "kiem_kho_config.json",
+                user_home / "kiem_kho_config.json",
+            ])
         else:
-            # Chạy từ source code - dùng thư mục chứa file source code
-            config_dir = Path(__file__).parent
+            # Chạy từ source code
+            search_locations.append(Path(__file__).parent / "kiem_kho_config.json")
         
-        # Thử load config cũ để lấy config_folder
-        temp_config_file = config_dir / "kiem_kho_config.json"
-        if temp_config_file.exists():
-            try:
-                with open(temp_config_file, 'r', encoding='utf-8') as f:
-                    old_config = json.load(f)
-                    if 'config_folder' in old_config and old_config['config_folder']:
-                        config_folder_path = Path(old_config['config_folder'])
-                        if config_folder_path.exists() and config_folder_path.is_dir():
-                            self.config_folder = str(config_folder_path.resolve())
-                            return Path(self.config_folder) / "kiem_kho_config.json"
-            except:
-                pass
+        # Tìm file config ở các vị trí và đọc config_folder từ đó
+        for config_file_path in search_locations:
+            if config_file_path.exists():
+                try:
+                    with open(config_file_path, 'r', encoding='utf-8') as f:
+                        old_config = json.load(f)
+                        # Nếu file này có config_folder, dùng nó
+                        if 'config_folder' in old_config and old_config['config_folder']:
+                            config_folder_path = Path(old_config['config_folder'])
+                            if config_folder_path.exists() and config_folder_path.is_dir():
+                                self.config_folder = str(config_folder_path.resolve())
+                                # Trả về đường dẫn file config trong config_folder (vị trí thực sự)
+                                return Path(self.config_folder) / "kiem_kho_config.json"
+                        # Nếu không có config_folder nhưng có đầy đủ thông tin, dùng file này
+                        elif 'template_file_path' in old_config and 'auto_save_folder' in old_config:
+                            # File này có thể là file config hợp lệ, nhưng chưa có config_folder
+                            # Trả về file này để load
+                            return config_file_path
+                except Exception as e:
+                    # Bỏ qua lỗi và tiếp tục tìm
+                    continue
         
-        return config_dir / "kiem_kho_config.json"
+        # Nếu không tìm thấy, dùng vị trí mặc định
+        if getattr(sys, 'frozen', False):
+            return Path(sys.executable).parent / "kiem_kho_config.json"
+        else:
+            return Path(__file__).parent / "kiem_kho_config.json"
     
     def load_config(self):
-        """Load cấu hình từ file - Windows-safe"""
+        """Load cấu hình từ file - Windows-safe, tìm ở nhiều vị trí"""
         try:
-            if self.config_file.exists():
-                # Windows-specific: Retry nếu file bị lock
+            # Danh sách các vị trí tìm file config (theo thứ tự ưu tiên)
+            search_locations = []
+            
+            # Ưu tiên 1: File config trong config_folder (nếu đã biết)
+            if self.config_folder:
+                search_locations.append(Path(self.config_folder) / "kiem_kho_config.json")
+            
+            # Ưu tiên 2: File config hiện tại
+            if self.config_file:
+                search_locations.append(self.config_file)
+            
+            # Ưu tiên 3: Tìm ở các vị trí khác
+            if getattr(sys, 'frozen', False):
+                exe_dir = Path(sys.executable).parent
+                search_locations.extend([
+                    exe_dir / "kiem_kho_config.json",
+                    exe_dir.parent / "kiem_kho_config.json",
+                ])
+                
+                user_home = Path.home()
+                search_locations.extend([
+                    user_home / "Desktop" / "kiem_kho_config.json",
+                    user_home / "Documents" / "kiem_kho_config.json",
+                    user_home / "kiem_kho_config.json",
+                ])
+            else:
+                search_locations.append(Path(__file__).parent / "kiem_kho_config.json")
+            
+            # Loại bỏ trùng lặp và chỉ giữ các file tồn tại
+            # Windows-safe: Normalize paths để so sánh (case-insensitive trên Windows)
+            unique_locations = []
+            seen = set()
+            for loc in search_locations:
+                try:
+                    if loc.exists():
+                        # Windows-safe: Normalize path và lowercase để so sánh
+                        if sys.platform == 'win32':
+                            loc_str = str(loc.resolve()).lower().replace('\\', '/')
+                        else:
+                            loc_str = str(loc.resolve())
+                        
+                        if loc_str not in seen:
+                            seen.add(loc_str)
+                            unique_locations.append(loc)
+                except Exception:
+                    # Bỏ qua nếu không thể resolve
+                    continue
+            
+            # Đọc từ các vị trí theo thứ tự ưu tiên
+            for config_file_path in unique_locations:
                 max_retries = 3
                 retry_count = 0
                 while retry_count < max_retries:
                     try:
-                        with open(self.config_file, 'r', encoding='utf-8') as f:
+                        with open(config_file_path, 'r', encoding='utf-8') as f:
                             config = json.load(f)
-                            # Format mới: có cả template_file_path và auto_save_folder
-                            if 'template_file_path' in config and 'auto_save_folder' in config:
-                                # Normalize paths cho Windows
-                                template_path = str(Path(config['template_file_path']).resolve()) if config['template_file_path'] else None
-                                auto_folder = str(Path(config['auto_save_folder']).resolve()) if config['auto_save_folder'] else None
-                                config_folder = str(Path(config['config_folder']).resolve()) if config.get('config_folder') else None
-                                # Cập nhật config_folder nếu có
-                                if config_folder:
-                                    self.config_folder = config_folder
-                                    # Cập nhật lại config_file path
-                                    self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
-                                return {
-                                    'template_file_path': template_path,
-                                    'auto_save_folder': auto_folder,
-                                    'config_folder': config_folder
-                                }
-                            # Format cũ - hỗ trợ backward compatibility
-                            elif 'auto_save_folder' in config:
-                                auto_folder = str(Path(config['auto_save_folder']).resolve()) if config['auto_save_folder'] else None
-                                return {
-                                    'template_file_path': None,
-                                    'auto_save_folder': auto_folder,
-                                    'config_folder': None
-                                }
+                        
+                        # Format mới: có cả template_file_path, auto_save_folder và config_folder
+                        if 'template_file_path' in config and 'auto_save_folder' in config:
+                            # Normalize paths cho Windows (quan trọng: phải normalize đúng cách)
+                            template_path = None
+                            auto_folder = None
+                            config_folder = None
+                            
+                            try:
+                                if config['template_file_path']:
+                                    template_path = str(Path(config['template_file_path']).resolve())
+                            except:
+                                pass
+                            
+                            try:
+                                if config['auto_save_folder']:
+                                    auto_folder = str(Path(config['auto_save_folder']).resolve())
+                            except:
+                                pass
+                            
+                            try:
+                                if config.get('config_folder'):
+                                    config_folder = str(Path(config['config_folder']).resolve())
+                            except:
+                                pass
+                            
+                            # QUAN TRỌNG: Nếu file này có config_folder, đọc file config từ đó (vị trí thực sự)
+                            if config_folder:
+                                try:
+                                    actual_config_file = Path(config_folder) / "kiem_kho_config.json"
+                                    # Windows-safe: So sánh đường dẫn case-insensitive
+                                    if actual_config_file.exists():
+                                        current_path_str = str(config_file_path.resolve())
+                                        actual_path_str = str(actual_config_file.resolve())
+                                        
+                                        # So sánh case-insensitive trên Windows
+                                        if sys.platform == 'win32':
+                                            if current_path_str.lower() != actual_path_str.lower():
+                                                # Đọc lại từ file config thực sự
+                                                with open(actual_config_file, 'r', encoding='utf-8') as f2:
+                                                    config = json.load(f2)
+                                                # Normalize lại paths
+                                                if config.get('template_file_path'):
+                                                    template_path = str(Path(config['template_file_path']).resolve())
+                                                if config.get('auto_save_folder'):
+                                                    auto_folder = str(Path(config['auto_save_folder']).resolve())
+                                                if config.get('config_folder'):
+                                                    config_folder = str(Path(config['config_folder']).resolve())
+                                        else:
+                                            if current_path_str != actual_path_str:
+                                                # Đọc lại từ file config thực sự
+                                                with open(actual_config_file, 'r', encoding='utf-8') as f2:
+                                                    config = json.load(f2)
+                                                # Normalize lại paths
+                                                if config.get('template_file_path'):
+                                                    template_path = str(Path(config['template_file_path']).resolve())
+                                                if config.get('auto_save_folder'):
+                                                    auto_folder = str(Path(config['auto_save_folder']).resolve())
+                                                if config.get('config_folder'):
+                                                    config_folder = str(Path(config['config_folder']).resolve())
+                                except Exception as e:
+                                    print(f"Lỗi khi đọc file config thực sự: {str(e)}")
+                                    # Nếu không đọc được, dùng config từ file đầu tiên
+                            
+                            # Cập nhật config_folder và config_file
+                            if config_folder:
+                                self.config_folder = config_folder
+                                self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
+                            
+                            return {
+                                'template_file_path': template_path,
+                                'auto_save_folder': auto_folder,
+                                'config_folder': config_folder
+                            }
+                        
+                        # Format cũ - hỗ trợ backward compatibility
+                        elif 'auto_save_folder' in config:
+                            auto_folder = str(Path(config['auto_save_folder']).resolve()) if config['auto_save_folder'] else None
+                            return {
+                                'template_file_path': None,
+                                'auto_save_folder': auto_folder,
+                                'config_folder': None
+                            }
+                        
                         break  # Thành công, thoát khỏi loop
                     except PermissionError:
                         retry_count += 1
                         if retry_count < max_retries:
                             time.sleep(0.2)
                         else:
-                            print(f"Lỗi khi đọc config: File bị lock sau {max_retries} lần thử")
+                            # Chuyển sang file tiếp theo
                             break
                     except Exception as e:
-                        print(f"Lỗi khi đọc config: {str(e)}")
-                        traceback.print_exc()
+                        # Chuyển sang file tiếp theo
                         break
         except Exception as e:
             print(f"Lỗi khi đọc config: {str(e)}")
@@ -515,10 +642,16 @@ class KiemKhoApp:
             # Lưu cấu hình (lưu vào thư mục config mới)
             self.save_config(template_path, folder_path, config_folder_path)
             
-            # Cập nhật biến
+            # Cập nhật biến (quan trọng: phải cập nhật sau khi save để lần sau load được)
             self.template_file_path = template_path
             self.auto_save_folder = folder_path
             self.config_folder = config_folder_path
+            # Cập nhật config_file để trỏ đến đúng vị trí
+            self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
+            
+            # Đảm bảo config đã được lưu thành công
+            if self.config_file.exists():
+                print(f"[OK] Đã lưu cấu hình vào: {self.config_file}")
             
             dialog.destroy()
         
@@ -562,30 +695,118 @@ class KiemKhoApp:
         # Đợi dialog đóng
         dialog.wait_window()
         
+    def get_original_dist_path(self):
+        """Lấy đường dẫn thư mục dist gốc từ file config (được đóng gói trong exe)"""
+        if not getattr(sys, 'frozen', False):
+            return None
+        
+        try:
+            # Ưu tiên 1: Tìm file config trong thư mục chứa exe (nếu copy cùng với exe)
+            exe_dir = Path(sys.executable).parent
+            config_file_py = exe_dir / "dist_path_config.py"
+            
+            # Thử đọc từ file Python trong thư mục exe trước
+            if config_file_py.exists():
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("dist_path_config", config_file_py)
+                    if spec and spec.loader:
+                        config_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(config_module)
+                        if hasattr(config_module, 'DIST_PATH') and config_module.DIST_PATH:
+                            dist_path = Path(config_module.DIST_PATH)
+                            if dist_path.exists():
+                                return dist_path
+                except Exception as e:
+                    print(f"Lỗi khi đọc dist_path_config.py từ exe dir: {str(e)}")
+            
+            # Ưu tiên 2: Đọc từ file Python đã đóng gói trong exe (bundle)
+            try:
+                if getattr(sys, '_MEIPASS', None):
+                    config_path = Path(sys._MEIPASS) / "dist_path_config.py"
+                    if config_path.exists():
+                        import importlib.util
+                        spec = importlib.util.spec_from_file_location("dist_path_config", config_path)
+                        if spec and spec.loader:
+                            config_module = importlib.util.module_from_spec(spec)
+                            spec.loader.exec_module(config_module)
+                            if hasattr(config_module, 'DIST_PATH') and config_module.DIST_PATH:
+                                dist_path = Path(config_module.DIST_PATH)
+                                if dist_path.exists():
+                                    return dist_path
+            except Exception as e:
+                print(f"Lỗi khi đọc dist_path_config.py từ bundle: {str(e)}")
+            
+            # Ưu tiên 3: Tìm file txt trong thư mục chứa exe
+            config_file = exe_dir / "dist_path.txt"
+            
+            # Ưu tiên 3: Tìm trong thư mục cha
+            if not config_file.exists():
+                parent_dir = exe_dir.parent
+                config_file = parent_dir / "dist_path.txt"
+            
+            # Ưu tiên 4: Tìm trong các thư mục phổ biến
+            if not config_file.exists():
+                user_home = Path.home()
+                possible_locations = [
+                    user_home / "Desktop" / "dist" / "dist_path.txt",
+                    user_home / "Documents" / "dist" / "dist_path.txt",
+                    user_home / "Downloads" / "dist" / "dist_path.txt",
+                ]
+                for loc in possible_locations:
+                    if loc.exists():
+                        config_file = loc
+                        break
+            
+            # Đọc đường dẫn từ file txt (backup)
+            if config_file.exists():
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    dist_path = f.read().strip()
+                    if dist_path and Path(dist_path).exists():
+                        return Path(dist_path)
+        except Exception as e:
+            print(f"Lỗi khi đọc dist_path config: {str(e)}")
+        
+        return None
+    
     def load_data(self):
         """Load dữ liệu từ file Excel"""
         try:
             # Kiểm tra nếu đang chạy từ executable (PyInstaller)
             if getattr(sys, 'frozen', False):
                 # Chạy từ executable
-                base_path = Path(sys._MEIPASS)
-                excel_path = base_path / "DuLieuDauVao.xlsx"
-                # Nếu không có trong bundle, tìm ở thư mục chứa executable
-                if not excel_path.exists():
-                    excel_path = Path(sys.executable).parent / "DuLieuDauVao.xlsx"
+                # ƯU TIÊN: Tìm file từ thư mục dist gốc (nơi build ban đầu)
+                original_dist_path = self.get_original_dist_path()
                 
-                # Xác định thư mục để tìm file thay thế (ưu tiên thư mục chứa executable)
-                search_dir = Path(sys.executable).parent
+                if original_dist_path:
+                    # Tìm file từ thư mục dist gốc
+                    excel_path = original_dist_path / "DuLieuDauVao.xlsx"
+                    search_dir = original_dist_path
+                else:
+                    # Fallback: Tìm trong thư mục chứa executable
+                    exe_dir = Path(sys.executable).parent
+                    excel_path = exe_dir / "DuLieuDauVao.xlsx"
+                    search_dir = exe_dir
+                
+                # Nếu không có trong thư mục dist gốc hoặc thư mục exe, thử tìm trong bundle
+                if not excel_path.exists():
+                    base_path = Path(sys._MEIPASS)
+                    excel_path = base_path / "DuLieuDauVao.xlsx"
+                
                 # Danh sách file thay thế nếu file chính không đọc được
                 xls_alternatives = [
                     search_dir / "KIEM KE Năm -2025 - BP ONLINE.xls",
                     search_dir / "KIEM KE Năm -2025 - BP ONLINE copy.xls",
                     search_dir / "DuLieuDauVao.xls",
-                    # Cũng thử trong bundle
-                    base_path / "KIEM KE Năm -2025 - BP ONLINE.xls",
-                    base_path / "KIEM KE Năm -2025 - BP ONLINE copy.xls",
-                    base_path / "DuLieuDauVao.xls",
                 ]
+                # Fallback: thử trong bundle nếu không tìm thấy
+                if getattr(sys, '_MEIPASS', None):
+                    base_path = Path(sys._MEIPASS)
+                    xls_alternatives.extend([
+                        base_path / "KIEM KE Năm -2025 - BP ONLINE.xls",
+                        base_path / "KIEM KE Năm -2025 - BP ONLINE copy.xls",
+                        base_path / "DuLieuDauVao.xls",
+                    ])
             else:
                 # Chạy từ source code
                 excel_path = Path(__file__).parent / "DuLieuDauVao.xlsx"
@@ -2368,94 +2589,109 @@ class KiemKhoApp:
             return
         
         # Cho phép người dùng chọn đường dẫn để lưu file
+        # KHÔNG set initialdir để không hiển thị đường dẫn đã chọn trước đó
+        # Mở dialog ở thư mục mặc định của hệ thống (Documents hoặc Desktop)
+        user_home = Path.home()
+        if sys.platform == 'win32':
+            # Windows: mở ở Documents (không phải đường dẫn đã chọn trước đó)
+            default_dir = str(user_home / "Documents")
+        else:
+            # macOS/Linux: mở ở Home
+            default_dir = str(user_home)
+        
         filename = filedialog.asksaveasfilename(
             title="Chọn đường dẫn để lưu file Excel tổng hợp",
             defaultextension=".xlsx",
             filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
-            initialfile=ten_file_1
+            initialfile=ten_file_1,
+            initialdir=default_dir  # Luôn mở ở thư mục mặc định, không phải đường dẫn cũ
         )
         
-        if filename:
-            try:
-                # Normalize path cho Windows
-                filename = str(Path(filename).resolve())
-                template_path_normalized = str(Path(self.template_file_path).resolve())
-                
-                # File 1: Chỉ copy file template từ đường dẫn đã cấu hình và đổi tên (KHÔNG ghi đè data)
-                # Windows-specific: Retry nếu file bị lock
-                max_retries = 5
-                retry_count = 0
-                copy_success = False
-                
-                while retry_count < max_retries and not copy_success:
-                    try:
-                        shutil.copy2(template_path_normalized, filename)
-                        copy_success = True
-                    except PermissionError as pe:
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            time.sleep(0.5)  # Đợi 0.5 giây trước khi thử lại
-                        else:
-                            messagebox.showerror("Lỗi", 
-                                f"Không thể copy file template!\n\n"
-                                f"File có thể đang được mở trong Excel hoặc chương trình khác.\n"
-                                f"Vui lòng đóng file và thử lại.\n\n"
-                                f"Lỗi: {str(pe)}")
-                            return
-                    except Exception as e:
-                        messagebox.showerror("Lỗi", f"Không thể copy file template: {str(e)}")
-                        traceback.print_exc()
+        if not filename:
+            # Người dùng đã hủy
+            return
+        
+        # Lưu file vào đường dẫn đã chọn
+        try:
+            # Normalize path cho Windows
+            filename = str(Path(filename).resolve())
+            template_path_normalized = str(Path(self.template_file_path).resolve())
+            
+            # File 1: Chỉ copy file template từ đường dẫn đã cấu hình và đổi tên (KHÔNG ghi đè data)
+            # Windows-specific: Retry nếu file bị lock
+            max_retries = 5
+            retry_count = 0
+            copy_success = False
+            
+            while retry_count < max_retries and not copy_success:
+                try:
+                    shutil.copy2(template_path_normalized, filename)
+                    copy_success = True
+                except PermissionError as pe:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        time.sleep(0.5)  # Đợi 0.5 giây trước khi thử lại
+                    else:
+                        messagebox.showerror("Lỗi", 
+                            f"Không thể copy file template!\n\n"
+                            f"File có thể đang được mở trong Excel hoặc chương trình khác.\n"
+                            f"Vui lòng đóng file và thử lại.\n\n"
+                            f"Lỗi: {str(pe)}")
                         return
-                
-                # KHÔNG ghi đè dữ liệu vào file 1 - giữ nguyên data từ template
-                
-                # File 2: Tự động lưu vào thư mục đã cấu hình (nếu có)
-                if self.auto_save_folder:
-                    try:
-                        # Tạo đường dẫn file 2 với tên file đúng format - Windows-safe
-                        file2_path = str(Path(self.auto_save_folder) / ten_file_2)
-                        
-                        # Windows-specific: Retry nếu file bị lock
-                        max_retries = 5
-                        retry_count = 0
-                        save_success = False
-                        
-                        while retry_count < max_retries and not save_success:
-                            try:
-                                # Lưu file 2 với data tổng hợp (ngầm, không hiển thị thông báo)
-                                df_save.to_excel(file2_path, index=False, engine='openpyxl')
-                                save_success = True
-                            except PermissionError as pe:
-                                retry_count += 1
-                                if retry_count < max_retries:
-                                    time.sleep(0.5)  # Đợi 0.5 giây trước khi thử lại
-                                else:
-                                    # Log lỗi nhưng không hiển thị cho người dùng
-                                    print(f"Lỗi khi lưu file tự động (file có thể đang mở): {str(pe)}")
-                                    traceback.print_exc()
-                                    break
-                            except Exception as e2:
+                except Exception as e:
+                    messagebox.showerror("Lỗi", f"Không thể copy file template: {str(e)}")
+                    traceback.print_exc()
+                    return
+            
+            # KHÔNG ghi đè dữ liệu vào file 1 - giữ nguyên data từ template
+            
+            # File 2: Tự động lưu vào thư mục đã cấu hình (nếu có)
+            if self.auto_save_folder:
+                try:
+                    # Tạo đường dẫn file 2 với tên file đúng format - Windows-safe
+                    file2_path = str(Path(self.auto_save_folder) / ten_file_2)
+                    
+                    # Windows-specific: Retry nếu file bị lock
+                    max_retries = 5
+                    retry_count = 0
+                    save_success = False
+                    
+                    while retry_count < max_retries and not save_success:
+                        try:
+                            # Lưu file 2 với data tổng hợp (ngầm, không hiển thị thông báo)
+                            df_save.to_excel(file2_path, index=False, engine='openpyxl')
+                            save_success = True
+                        except PermissionError as pe:
+                            retry_count += 1
+                            if retry_count < max_retries:
+                                time.sleep(0.5)  # Đợi 0.5 giây trước khi thử lại
+                            else:
                                 # Log lỗi nhưng không hiển thị cho người dùng
-                                print(f"Lỗi khi lưu file tự động: {str(e2)}")
+                                print(f"Lỗi khi lưu file tự động (file có thể đang mở): {str(pe)}")
                                 traceback.print_exc()
                                 break
-                        
-                        # Hiển thị thông báo thành công (chỉ đề cập file 1)
-                        messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp vào {filename}")
-                    except Exception as e2:
-                        # Nếu lỗi khi lưu file 2, chỉ log lỗi nhưng không hiển thị cho người dùng
-                        print(f"Lỗi khi lưu file tự động: {str(e2)}")
-                        traceback.print_exc()
-                        # Vẫn hiển thị thành công cho file 1
-                        messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp vào {filename}")
-                else:
-                    # Không có thư mục tự động, chỉ lưu file 1
-                    messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp vào {filename}")
+                        except Exception as e2:
+                            # Log lỗi nhưng không hiển thị cho người dùng
+                            print(f"Lỗi khi lưu file tự động: {str(e2)}")
+                            traceback.print_exc()
+                            break
                     
-            except Exception as e:
-                error_msg = str(e)
-                traceback.print_exc()
-                messagebox.showerror("Lỗi", f"Không thể lưu file: {error_msg}")
+                    # Hiển thị thông báo thành công
+                    messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp thành công!")
+                except Exception as e2:
+                    # Nếu lỗi khi lưu file 2, chỉ log lỗi nhưng không hiển thị cho người dùng
+                    print(f"Lỗi khi lưu file tự động: {str(e2)}")
+                    traceback.print_exc()
+                    # Vẫn hiển thị thành công cho file 1
+                    messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp thành công!")
+            else:
+                # Không có thư mục tự động, chỉ lưu file 1
+                messagebox.showinfo("Thành công", f"Đã lưu file tổng hợp thành công!")
+                
+        except Exception as e:
+            error_msg = str(e)
+            traceback.print_exc()
+            messagebox.showerror("Lỗi", f"Không thể lưu file: {error_msg}")
 
 def main():
     try:

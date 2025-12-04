@@ -22,7 +22,6 @@ if exist "dist" rmdir /s /q dist
 if exist "KiemKhoApp.spec" del /q KiemKhoApp.spec
 
 pyinstaller --onefile --windowed --name "KiemKhoApp" ^
-    --add-data "DuLieuDauVao.xlsx;." ^
     --add-data "Kiemke_template.xlsx;." ^
     --hidden-import pandas ^
     --hidden-import openpyxl ^

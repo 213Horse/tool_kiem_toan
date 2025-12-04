@@ -75,7 +75,6 @@ echo Đang build, vui lòng đợi (có thể mất vài phút)...
 echo.
 
 pyinstaller --onefile --windowed --name "KiemKhoApp" ^
-    --add-data "DuLieuDauVao.xlsx;." ^
     --hidden-import pandas ^
     --hidden-import openpyxl ^
     --hidden-import xlrd ^
