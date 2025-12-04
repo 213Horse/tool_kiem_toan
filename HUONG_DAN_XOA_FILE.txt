@@ -1,0 +1,51 @@
+========================================
+HƯỚNG DẪN XÓA FILE SAU KHI BUILD .EXE
+========================================
+
+SAU KHI BUILD FILE .EXE THÀNH CÔNG:
+
+1. CÁCH 1: Dùng script tự động (Khuyên dùng)
+   - Double-click vào file: XOA_FILE_SAU_BUILD.bat
+   - Nhấn Y để xác nhận
+   - Script sẽ tự động xóa tất cả file không cần thiết
+
+2. CÁCH 2: Xóa thủ công
+   - Xóa các file sau:
+     * kiem_kho_app.py
+     * requirements.txt
+     * BUILD_EXE_SIMPLE.bat
+     * BUILD_EXE_DEBUG.bat
+     * SUA_LOI_BUILD.bat
+     * TAO_FILE_EXE_WINDOWS.bat
+     * build_windows.bat
+     * CHAY_TREN_WINDOWS.bat
+     * CHAY_TREN_WINDOWS_SIMPLE.bat
+     * HUONG_DAN_BUILD_EXE_WINDOWS.txt
+     * HUONG_DAN_SUA_LOI.txt
+     * HUONG_DAN_SUA_TRANG_MAN_HINH.txt
+     * DANH_SACH_FILE_COPY_WINDOWS.txt
+     * HUONG_DAN_PORTABLE.txt
+     * README.txt
+     * Thư mục "build" (nếu có)
+     * File "KiemKhoApp.spec" (nếu có)
+
+CÁC FILE CẦN GIỮ LẠI:
+✓ dist\KiemKhoApp.exe - File ứng dụng chính
+✓ DuLieuDauVao.xlsx - File dữ liệu (BẮT BUỘC)
+✓ Kiemke_template.xlsx - File template (BẮT BUỘC)
+✓ kiem_kho_config.json - File cấu hình (sẽ được tạo khi chạy app lần đầu)
+
+LƯU Ý:
+- File .exe đã được bundle tất cả dependencies, không cần Python hay các thư viện
+- File DuLieuDauVao.xlsx và Kiemke_template.xlsx là BẮT BUỘC phải có
+- File config sẽ được tạo tự động khi chạy app lần đầu
+- Sau khi xóa, bạn chỉ cần giữ lại file .exe và 2 file Excel để chạy ứng dụng
+
+SAU KHI XÓA:
+- Copy file dist\KiemKhoApp.exe ra Desktop hoặc bất kỳ đâu
+- Copy file DuLieuDauVao.xlsx vào cùng thư mục với .exe (nếu muốn cập nhật dữ liệu)
+- Copy file Kiemke_template.xlsx vào cùng thư mục với .exe
+- Double-click KiemKhoApp.exe để chạy
+
+========================================
+

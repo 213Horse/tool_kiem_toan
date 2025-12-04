@@ -125,6 +125,16 @@ if [ -f "HUONG_DAN_PORTABLE.txt" ]; then
     echo "[OK] Da copy: HUONG_DAN_PORTABLE.txt"
 fi
 
+if [ -f "XOA_FILE_SAU_BUILD.bat" ]; then
+    cp "XOA_FILE_SAU_BUILD.bat" "$TEMP_DIR/"
+    echo "[OK] Da copy: XOA_FILE_SAU_BUILD.bat"
+fi
+
+if [ -f "HUONG_DAN_XOA_FILE.txt" ]; then
+    cp "HUONG_DAN_XOA_FILE.txt" "$TEMP_DIR/"
+    echo "[OK] Da copy: HUONG_DAN_XOA_FILE.txt"
+fi
+
 # Tạo file README trong zip
 cat > "$TEMP_DIR/README.txt" << 'EOF'
 ═══════════════════════════════════════════════════════════════
