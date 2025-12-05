@@ -58,6 +58,8 @@ class KiemKhoApp:
         self.tong_hop_edit_entry = None  # Entry widget để chỉnh sửa trong tab Tổng hợp
         self.tong_hop_editing_item = None  # Item đang được chỉnh sửa trong tab Tổng hợp
         self.tong_hop_editing_column = None  # Cột đang được chỉnh sửa trong tab Tổng hợp
+        self._tong_hop_finish_scheduled = None  # ID của scheduled finish_tong_hop_edit call
+        self.is_processing_tong_hop_edit = False  # Flag để tránh xử lý 2 lần
         
         # Load cấu hình từ file (nếu có)
         saved_config = self.load_config()
@@ -1612,9 +1614,11 @@ class KiemKhoApp:
                 messagebox.showerror("Lỗi", f"Không tìm thấy cột 'Số thùng' trong file Excel!\nCác cột có sẵn: {list(self.df.columns)}")
                 return
             
-            # Chuyển đổi sang string để so sánh
+            # Chuyển đổi sang string để so sánh (không phân biệt chữ hoa/thường)
             self.df[so_thung_col] = self.df[so_thung_col].astype(str).str.strip()
-            self.current_box_data = self.df[self.df[so_thung_col] == so_thung].copy()
+            # So sánh không phân biệt chữ hoa/thường
+            so_thung_lower = so_thung.lower()
+            self.current_box_data = self.df[self.df[so_thung_col].str.lower() == so_thung_lower].copy()
             
             if self.current_box_data.empty:
                 messagebox.showinfo("Thông báo", f"Không tìm thấy dữ liệu cho thùng số {so_thung}")
@@ -1627,8 +1631,9 @@ class KiemKhoApp:
             so_tua_trong_thung = len(self.current_box_data)
             so_tua_da_quet = len(self.scanned_items)
             
-            # Nếu đang load lại cùng một thùng và đã quét đủ
-            if self.current_box_number == so_thung and so_tua_da_quet >= so_tua_trong_thung:
+            # Nếu đang load lại cùng một thùng và đã quét đủ (so sánh không phân biệt chữ hoa/thường)
+            current_box_lower = str(self.current_box_number).lower() if self.current_box_number else ''
+            if current_box_lower == so_thung.lower() and so_tua_da_quet >= so_tua_trong_thung:
                 messagebox.showwarning(
                     "Cảnh báo", 
                     f"Thùng {so_thung} đã được kiểm kê đủ {so_tua_trong_thung} tựa!\n\n"
@@ -1675,12 +1680,13 @@ class KiemKhoApp:
         count = 0
         
         for data in self.tong_hop_data:
-            # So sánh số thùng (có thể là 'Số thùng' hoặc 'Vị trí mới')
+            # So sánh số thùng (có thể là 'Số thùng' hoặc 'Vị trí mới') - không phân biệt chữ hoa/thường
             so_thung_in_data = str(data.get('Số thùng', '')).strip()
             vi_tri_moi_in_data = str(data.get('Vị trí mới', '')).strip()
             
-            # Đếm nếu số thùng khớp
-            if so_thung_in_data == so_thung_clean or vi_tri_moi_in_data == so_thung_clean:
+            # Đếm nếu số thùng khớp (so sánh không phân biệt chữ hoa/thường)
+            if (so_thung_in_data.lower() == so_thung_clean.lower() or 
+                vi_tri_moi_in_data.lower() == so_thung_clean.lower()):
                 count += 1
         
         return count
@@ -1695,14 +1701,16 @@ class KiemKhoApp:
             isbn_clean_digits = ''.join(filter(str.isdigit, isbn_clean))
             so_thung_clean = str(so_thung).strip()
             
-            # Tối ưu: chỉ kiểm tra các item có số thùng khớp trước
+            # Tối ưu: chỉ kiểm tra các item có số thùng khớp trước (không phân biệt chữ hoa/thường)
+            so_thung_clean_lower = so_thung_clean.lower()
             for data in self.tong_hop_data:
                 # Kiểm tra số thùng trước (nhanh hơn)
                 so_thung_in_data = str(data.get('Số thùng', '')).strip()
                 vi_tri_moi_in_data = str(data.get('Vị trí mới', '')).strip()
                 
-                # Nếu số thùng không khớp, bỏ qua ngay
-                if so_thung_in_data != so_thung_clean and vi_tri_moi_in_data != so_thung_clean:
+                # Nếu số thùng không khớp, bỏ qua ngay (so sánh không phân biệt chữ hoa/thường)
+                if (so_thung_in_data.lower() != so_thung_clean_lower and 
+                    vi_tri_moi_in_data.lower() != so_thung_clean_lower):
                     continue
                 
                 # Kiểm tra ISBN chỉ khi số thùng khớp
@@ -2257,15 +2265,19 @@ class KiemKhoApp:
                             while len(values) < 8:
                                 values.append('')
                             
-                            # Lấy giá trị Ghi chú hiện tại (nếu có)
-                            ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
+                            # Lấy giá trị Ghi chú hiện tại từ scanned_items (để giữ lại phần người dùng nhập)
+                            ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
+                            if not ghi_chu_hien_tai:
+                                # Nếu không có trong scanned_items, lấy từ values
+                                ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
                             
                             # Tự động điền số lượng thiếu/dư vào ô Ghi chú
                             # QUAN TRỌNG: Xóa TẤT CẢ các pattern lỗi cũ trước khi thêm lỗi mới
                             import re
                             if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
-                                # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" (ở bất kỳ vị trí nào)
-                                ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                                # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
+                                # Pattern: "Thiếu X cuốn" hoặc "Dư X cuốn" có thể có dấu phẩy, dấu chấm, khoảng trắng sau đó
+                                ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
                                 ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
                                 ghi_chu_cleaned = ghi_chu_cleaned.strip()
                                 
@@ -2302,9 +2314,9 @@ class KiemKhoApp:
                             # Xóa thông tin thiếu/dư tự động khỏi Ghi chú (nếu có)
                             if ghi_chu_hien_tai:
                                 import re
-                                # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" ở đầu hoặc giữa
-                                ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                                ghi_chu_cleaned = re.sub(r'\.?\s*(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
+                                # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
+                                ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                                ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
                                 values[7] = ghi_chu_cleaned.strip()
                             else:
                                 values[7] = ''
@@ -2436,15 +2448,19 @@ class KiemKhoApp:
                             while len(values) < 8:
                                 values.append('')
                             
-                            # Lấy giá trị Ghi chú hiện tại
-                            ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
+                            # Lấy giá trị Ghi chú hiện tại từ scanned_items (để giữ lại phần người dùng nhập)
+                            ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
+                            if not ghi_chu_hien_tai:
+                                # Nếu không có trong scanned_items, lấy từ values
+                                ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
                             
                             # Tự động điền số lượng thiếu/dư vào ô Ghi chú
                             # QUAN TRỌNG: Xóa TẤT CẢ các pattern lỗi cũ trước khi thêm lỗi mới
                             import re
                             if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
-                                # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" (ở bất kỳ vị trí nào)
-                                ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                                # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
+                                # Pattern: "Thiếu X cuốn" hoặc "Dư X cuốn" có thể có dấu phẩy, dấu chấm, khoảng trắng sau đó
+                                ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
                                 ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
                                 ghi_chu_cleaned = ghi_chu_cleaned.strip()
                                 
@@ -2471,14 +2487,18 @@ class KiemKhoApp:
                             while len(values) < 8:
                                 values.append('')
                             
-                            ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
+                            # Lấy giá trị Ghi chú hiện tại từ scanned_items (để giữ lại phần người dùng nhập)
+                            ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
+                            if not ghi_chu_hien_tai:
+                                # Nếu không có trong scanned_items, lấy từ values
+                                ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
                             
                             # Xóa thông tin thiếu/dư tự động khỏi Ghi chú (nếu có)
                             if ghi_chu_hien_tai:
-                                # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" ở đầu
+                                # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
                                 import re
-                                ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                                ghi_chu_cleaned = re.sub(r'\.?\s*(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
+                                ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                                ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
                                 values[7] = ghi_chu_cleaned.strip()
                             else:
                                 values[7] = ''
@@ -2569,8 +2589,8 @@ class KiemKhoApp:
                     import re
                     ghi_chu_cleaned = ''
                     if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
-                        # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" (ở bất kỳ vị trí nào)
-                        ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                        # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
+                        ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
                         ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
                         ghi_chu_cleaned = ghi_chu_cleaned.strip()
                     
@@ -2597,8 +2617,8 @@ class KiemKhoApp:
                     
                     if ghi_chu_hien_tai:
                         import re
-                        ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                        ghi_chu_cleaned = re.sub(r'\.?\s*(Thiếu \d+ cuốn|Dư \d+ cuốn)\.?\s*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
+                        ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                        ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
                         values[7] = ghi_chu_cleaned.strip()
                     else:
                         values[7] = ''
@@ -3265,20 +3285,103 @@ class KiemKhoApp:
         self.tong_hop_editing_column = column_index
         
         def finish_on_enter(event):
+            # Hủy scheduled call nếu có
+            if self._tong_hop_finish_scheduled is not None:
+                try:
+                    # Chỉ cancel nếu ID hợp lệ
+                    if isinstance(self._tong_hop_finish_scheduled, str) and self._tong_hop_finish_scheduled:
+                        self.root.after_cancel(self._tong_hop_finish_scheduled)
+                except (ValueError, TypeError):
+                    # Bỏ qua lỗi nếu ID không hợp lệ
+                    pass
+                self._tong_hop_finish_scheduled = None
             self.finish_tong_hop_edit()
         
         def finish_on_focus_out(event):
-            # Delay một chút để tránh conflict với click events
-            self.root.after(100, self.finish_tong_hop_edit)
+            # Kiểm tra entry còn tồn tại và chưa đang xử lý
+            if not self.tong_hop_edit_entry or self.is_processing_tong_hop_edit:
+                return
+            
+            # Kiểm tra widget còn tồn tại
+            try:
+                if not self.tong_hop_edit_entry.winfo_exists():
+                    return
+            except:
+                return
+            
+            # Hủy scheduled call cũ nếu có (nếu có)
+            if self._tong_hop_finish_scheduled is not None:
+                try:
+                    if isinstance(self._tong_hop_finish_scheduled, str) and self._tong_hop_finish_scheduled:
+                        self.root.after_cancel(self._tong_hop_finish_scheduled)
+                except (ValueError, TypeError, tk.TclError):
+                    pass
+                self._tong_hop_finish_scheduled = None
+            
+            # Gọi trực tiếp - KHÔNG dùng after() hoặc after_idle() để tránh lỗi
+            # Sử dụng try-except để bắt mọi lỗi có thể xảy ra
+            try:
+                self.finish_tong_hop_edit()
+            except Exception as e:
+                # Nếu có lỗi, chỉ log và cleanup
+                print(f"Error in finish_on_focus_out: {e}")
+                try:
+                    if self.tong_hop_edit_entry:
+                        self.tong_hop_edit_entry.destroy()
+                except:
+                    pass
+                self.tong_hop_edit_entry = None
+                self.tong_hop_editing_item = None
+                self.tong_hop_editing_column = None
+                self.is_processing_tong_hop_edit = False
         
         self.tong_hop_edit_entry.bind('<Return>', finish_on_enter)
         self.tong_hop_edit_entry.bind('<FocusOut>', finish_on_focus_out)
         self.tong_hop_edit_entry.bind('<Escape>', lambda e: self.cancel_tong_hop_edit())
     
+    def _do_finish_tong_hop_edit(self):
+        """Wrapper để reset scheduled flag trước khi gọi finish_tong_hop_edit"""
+        self._tong_hop_finish_scheduled = None
+        # Gọi finish trực tiếp
+        self.finish_tong_hop_edit()
+    
     def finish_tong_hop_edit(self):
         """Hoàn tất việc chỉnh sửa trong tab Tổng hợp"""
+        # Tránh xử lý 2 lần nếu đang trong quá trình xử lý
+        if self.is_processing_tong_hop_edit:
+            return
+        
+        # Hủy scheduled call nếu có
+        if self._tong_hop_finish_scheduled is not None:
+            try:
+                if isinstance(self._tong_hop_finish_scheduled, str) and self._tong_hop_finish_scheduled:
+                    self.root.after_cancel(self._tong_hop_finish_scheduled)
+            except (ValueError, TypeError, tk.TclError):
+                # Bỏ qua lỗi nếu ID không hợp lệ hoặc đã bị cancel
+                pass
+            self._tong_hop_finish_scheduled = None
+        
+        # Kiểm tra entry và item còn tồn tại
         if not self.tong_hop_edit_entry or not self.tong_hop_editing_item:
             return
+        
+        # Kiểm tra entry widget còn tồn tại trong window
+        try:
+            if not self.tong_hop_edit_entry.winfo_exists():
+                # Entry đã bị destroy, cleanup và return
+                self.tong_hop_edit_entry = None
+                self.tong_hop_editing_item = None
+                self.tong_hop_editing_column = None
+                return
+        except:
+            # Nếu không thể kiểm tra, giả sử đã bị destroy
+            self.tong_hop_edit_entry = None
+            self.tong_hop_editing_item = None
+            self.tong_hop_editing_column = None
+            return
+        
+        # Đặt flag để tránh xử lý lại
+        self.is_processing_tong_hop_edit = True
         
         try:
             # Lấy giá trị mới
@@ -3314,12 +3417,24 @@ class KiemKhoApp:
                     column_name = column_mapping.get(column_index)
                     if column_name:
                         self.tong_hop_data[data_index][column_name] = new_value
-                        # Lưu backup khi chỉnh sửa
-                        self.save_backup_on_change()
+                        
+                        # Nếu là cột "Tồn thực tế" (column_index == 6), tự động check và cập nhật Tình trạng và Ghi chú
+                        if column_index == 6:
+                            self._check_and_update_tinh_trang_tong_hop(data_index, new_value, values, item_id)
+                        
+                        # Lưu backup khi chỉnh sửa (gọi trực tiếp, không dùng after)
+                        try:
+                            self.save_backup()
+                        except Exception as backup_error:
+                            # Không hiển thị lỗi cho người dùng, chỉ log
+                            print(f"Error saving backup: {backup_error}")
             
         except Exception as e:
             messagebox.showerror("Lỗi", f"Không thể cập nhật dữ liệu: {str(e)}")
         finally:
+            # Reset flag
+            self.is_processing_tong_hop_edit = False
+            
             # Xóa entry widget
             if self.tong_hop_edit_entry:
                 try:
@@ -3330,8 +3445,181 @@ class KiemKhoApp:
             self.tong_hop_editing_item = None
             self.tong_hop_editing_column = None
     
+    def _check_and_update_tinh_trang_tong_hop(self, data_index, ton_thuc_te_new, values, item_id):
+        """Tự động check và cập nhật Tình trạng và Ghi chú khi sửa Tồn thực tế ở tab Tổng hợp"""
+        try:
+            if data_index < 0 or data_index >= len(self.tong_hop_data):
+                return
+            
+            data = self.tong_hop_data[data_index]
+            isbn = data.get('ISBN', '').strip()
+            so_thung = data.get('Số thùng', '').strip()
+            
+            if not isbn or not so_thung:
+                return
+            
+            # Tìm "Tồn tựa trong thùng" từ dữ liệu gốc (self.df)
+            ton_trong_thung = 0
+            if self.df is not None and not self.df.empty:
+                # Tìm trong df dựa trên ISBN và số thùng
+                isbn_clean = str(isbn).strip()
+                isbn_clean_digits = ''.join(filter(str.isdigit, isbn_clean))
+                
+                # Tìm cột số thùng và ISBN trong df
+                so_thung_col = None
+                isbn_col = None
+                ton_tung_tua_col = None
+                
+                for col in self.df.columns:
+                    col_lower = str(col).lower().strip()
+                    if ('số thùng' in col_lower or 'so thung' in col_lower or 
+                        col_lower == 'thùng' or col_lower == 'thung'):
+                        so_thung_col = col
+                    elif 'isbn' in col_lower:
+                        isbn_col = col
+                    elif (('tồn' in col_lower and 'tựa' in col_lower) or 
+                          ('ton' in col_lower and 'tua' in col_lower) or 
+                          'qty tựa trong thùng' in col_lower or 
+                          'qty tua trong thung' in col_lower):
+                        ton_tung_tua_col = col
+                
+                # Tìm dòng khớp với ISBN và số thùng
+                if so_thung_col and isbn_col and ton_tung_tua_col:
+                    matched_row = None
+                    for idx, row in self.df.iterrows():
+                        row_isbn = str(row.get(isbn_col, '')).strip()
+                        row_so_thung = str(row.get(so_thung_col, '')).strip()
+                        
+                        # So sánh ISBN (có thể không khớp hoàn toàn)
+                        row_isbn_digits = ''.join(filter(str.isdigit, row_isbn))
+                        isbn_match = (row_isbn == isbn_clean or 
+                                     row_isbn.endswith(isbn_clean) or 
+                                     isbn_clean.endswith(row_isbn) or
+                                     (row_isbn_digits and isbn_clean_digits and row_isbn_digits == isbn_clean_digits))
+                        
+                        # So sánh số thùng (không phân biệt chữ hoa/thường)
+                        row_so_thung_lower = row_so_thung.lower()
+                        so_thung_lower = so_thung.lower()
+                        so_thung_match = (row_so_thung_lower == so_thung_lower or 
+                                         row_so_thung_lower.endswith(so_thung_lower) or 
+                                         so_thung_lower.endswith(row_so_thung_lower))
+                        
+                        if isbn_match and so_thung_match:
+                            matched_row = row
+                            break
+                    
+                    if matched_row is not None:
+                        ton_trong_thung = matched_row.get(ton_tung_tua_col, 0)
+                        try:
+                            ton_trong_thung = int(float(ton_trong_thung)) if ton_trong_thung else 0
+                        except:
+                            ton_trong_thung = 0
+            
+            # So sánh Tồn thực tế với Tồn tựa trong thùng
+            try:
+                ton_thuc_te_num = float(ton_thuc_te_new) if ton_thuc_te_new else 0
+                ton_trong_thung_num = float(ton_trong_thung) if ton_trong_thung else 0
+                
+                # Đảm bảo values có đủ 11 cột (theo tonghop_columns)
+                while len(values) < 11:
+                    values.append('')
+                
+                if abs(ton_thuc_te_num - ton_trong_thung_num) > 0.01:
+                    # Có lệch - tự động cập nhật tình trạng và số lượng thiếu/dư vào Ghi chú
+                    if ton_thuc_te_num < ton_trong_thung_num:
+                        tinh_trang = "Thiếu"
+                        so_luong_lech = int(ton_trong_thung_num - ton_thuc_te_num)
+                        ghi_chu_auto = f"Thiếu {so_luong_lech} cuốn"
+                    else:
+                        tinh_trang = "Dư"
+                        so_luong_lech = int(ton_thuc_te_num - ton_trong_thung_num)
+                        ghi_chu_auto = f"Dư {so_luong_lech} cuốn"
+                    
+                    # Lấy giá trị Ghi chú hiện tại từ tong_hop_data (để giữ lại phần người dùng nhập)
+                    ghi_chu_hien_tai = data.get('Ghi chú', '')
+                    if not ghi_chu_hien_tai:
+                        # Nếu không có trong data, lấy từ values
+                        ghi_chu_hien_tai = values[9] if len(values) > 9 else ''
+                    
+                    # Tự động điền số lượng thiếu/dư vào ô Ghi chú
+                    # QUAN TRỌNG: Xóa TẤT CẢ các pattern lỗi cũ trước khi thêm lỗi mới
+                    import re
+                    if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
+                        # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
+                        ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                        ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
+                        ghi_chu_cleaned = ghi_chu_cleaned.strip()
+                        
+                        # Thêm thông tin thiếu/dư mới vào đầu
+                        if ghi_chu_cleaned:
+                            ghi_chu_moi = f"{ghi_chu_auto}. {ghi_chu_cleaned}"
+                        else:
+                            ghi_chu_moi = ghi_chu_auto
+                    else:
+                        # Chưa có nội dung, điền mới
+                        ghi_chu_moi = ghi_chu_auto
+                    
+                    values[8] = tinh_trang  # Tình trạng ở index 8
+                    values[9] = ghi_chu_moi  # Ghi chú mới
+                    
+                    # Cập nhật tong_hop_data
+                    self.tong_hop_data[data_index]['Tình trạng'] = tinh_trang
+                    self.tong_hop_data[data_index]['Ghi chú'] = ghi_chu_moi
+                    
+                    # Cập nhật tree
+                    if item_id:
+                        self.tong_hop_tree.item(item_id, values=values)
+                else:
+                    # Đã khớp - xóa tình trạng
+                    # Xóa thông tin thiếu/dư khỏi Ghi chú (nếu có) nhưng giữ lại phần người dùng nhập
+                    # Lấy giá trị Ghi chú hiện tại từ tong_hop_data (để giữ lại phần người dùng nhập)
+                    ghi_chu_hien_tai = data.get('Ghi chú', '')
+                    if not ghi_chu_hien_tai:
+                        # Nếu không có trong data, lấy từ values
+                        ghi_chu_hien_tai = values[9] if len(values) > 9 else ''
+                    
+                    # Xóa thông tin thiếu/dư tự động khỏi Ghi chú (nếu có)
+                    if ghi_chu_hien_tai:
+                        # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
+                        import re
+                        ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
+                        ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
+                        ghi_chu_cleaned = ghi_chu_cleaned.strip()
+                    else:
+                        ghi_chu_cleaned = ''
+                    
+                    values[8] = ''  # Xóa tình trạng
+                    values[9] = ghi_chu_cleaned  # Ghi chú đã làm sạch
+                    
+                    # Cập nhật tong_hop_data
+                    self.tong_hop_data[data_index]['Tình trạng'] = ''
+                    self.tong_hop_data[data_index]['Ghi chú'] = ghi_chu_cleaned
+                    
+                    # Cập nhật tree
+                    if item_id:
+                        self.tong_hop_tree.item(item_id, values=values)
+            except Exception as e:
+                # Nếu có lỗi khi so sánh, không làm gì cả
+                print(f"Lỗi khi check tình trạng: {str(e)}")
+                pass
+        except Exception as e:
+            # Nếu có lỗi, không làm gì cả
+            print(f"Lỗi khi check và update tình trạng: {str(e)}")
+            pass
+    
     def cancel_tong_hop_edit(self):
         """Hủy việc chỉnh sửa trong tab Tổng hợp"""
+        # Hủy scheduled call nếu có
+        if self._tong_hop_finish_scheduled is not None:
+            try:
+                # Chỉ cancel nếu ID hợp lệ
+                if isinstance(self._tong_hop_finish_scheduled, str) and self._tong_hop_finish_scheduled:
+                    self.root.after_cancel(self._tong_hop_finish_scheduled)
+            except (ValueError, TypeError):
+                # Bỏ qua lỗi nếu ID không hợp lệ
+                pass
+            self._tong_hop_finish_scheduled = None
+        
         if self.tong_hop_edit_entry:
             try:
                 self.tong_hop_edit_entry.destroy()
@@ -3767,14 +4055,40 @@ class KiemKhoApp:
     def save_backup_on_change(self):
         """Lưu backup ngay lập tức khi có thay đổi dữ liệu"""
         # Delay một chút để tránh lưu quá nhiều lần
-        if hasattr(self, '_backup_scheduled'):
-            self.root.after_cancel(self._backup_scheduled)
-        
-        def do_save():
-            self.save_backup()
+        if hasattr(self, '_backup_scheduled') and self._backup_scheduled is not None:
+            try:
+                # Chỉ cancel nếu ID hợp lệ
+                if isinstance(self._backup_scheduled, str) and self._backup_scheduled:
+                    self.root.after_cancel(self._backup_scheduled)
+            except (ValueError, TypeError, tk.TclError):
+                # Bỏ qua lỗi nếu ID không hợp lệ
+                pass
             self._backup_scheduled = None
         
-        self._backup_scheduled = self.root.after(2000, do_save)  # Lưu sau 2 giây
+        def do_save():
+            try:
+                self.save_backup()
+            except Exception as e:
+                # Không hiển thị lỗi cho người dùng
+                print(f"Error saving backup: {e}")
+            finally:
+                self._backup_scheduled = None
+        
+        try:
+            after_id = self.root.after(2000, do_save)  # Lưu sau 2 giây
+            # Chỉ lưu nếu after() trả về giá trị hợp lệ
+            if after_id is not None:
+                self._backup_scheduled = after_id
+            else:
+                # Nếu after() trả về None, lưu ngay
+                self.save_backup()
+        except Exception as e:
+            # Nếu có lỗi với after(), lưu ngay
+            print(f"Error scheduling backup: {e}")
+            try:
+                self.save_backup()
+            except:
+                pass
     
     def setup_signal_handlers(self):
         """Đăng ký xử lý signal để lưu backup khi shutdown (cúp điện, tắt máy)"""
