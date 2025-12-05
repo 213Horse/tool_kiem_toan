@@ -8,13 +8,65 @@
       "Vị trí mới": "",
       "ISBN": "6935364006686",
       "Tựa": "Jewelry Box-sunflower",
-      "Tồn thực tế": "5",
+      "Tồn thực tế": "34",
       "Số thùng": "032-on 1",
+      "Tình trạng": "Dư",
+      "Ghi chú": "Dư 25 cuốn",
+      "Note thùng": ""
+    },
+    {
+      "N/X": "KIEM KE Năm 2025 - BP Online",
+      "Số phiếu": "P-05/12/2025",
+      "Ngày": "05/12/25",
+      "Vị trí mới": "",
+      "ISBN": "123123123",
+      "Tựa": "ewwewe",
+      "Tồn thực tế": "2",
+      "Số thùng": "032-on 1",
+      "Tình trạng": "Dư",
+      "Ghi chú": "Dư 2 cuốn",
+      "Note thùng": ""
+    },
+    {
+      "N/X": "KIEM KE Năm 2025 - BP Online",
+      "Số phiếu": "P-05/12/2025",
+      "Ngày": "05/12/25",
+      "Vị trí mới": "",
+      "ISBN": "021128085",
+      "Tựa": "Panda milk tea",
+      "Tồn thực tế": "23",
+      "Số thùng": "032-on 10",
       "Tình trạng": "Thiếu",
-      "Ghi chú": "Thiếu 4 cuốn,okok",
+      "Ghi chú": "Thiếu 1 cuốn",
+      "Note thùng": ""
+    },
+    {
+      "N/X": "KIEM KE Năm 2025 - BP Online",
+      "Số phiếu": "P-05/12/2025",
+      "Ngày": "05/12/25",
+      "Vị trí mới": "",
+      "ISBN": "6932691912390",
+      "Tựa": "Windmill music box",
+      "Tồn thực tế": "9",
+      "Số thùng": "032-on 15",
+      "Tình trạng": "Dư",
+      "Ghi chú": "Dư 2 cuốn",
+      "Note thùng": ""
+    },
+    {
+      "N/X": "KIEM KE Năm 2025 - BP Online",
+      "Số phiếu": "P-05/12/2025",
+      "Ngày": "05/12/25",
+      "Vị trí mới": "",
+      "ISBN": "6932691988401",
+      "Tựa": "",
+      "Tồn thực tế": "23",
+      "Số thùng": "032-on 15",
+      "Tình trạng": "Dư",
+      "Ghi chú": "Dư 23 cuốn",
       "Note thùng": ""
     }
   ],
   "current_box_number": null,
-  "timestamp": 1764933192.378657
+  "timestamp": 1764952978.813967
 }
