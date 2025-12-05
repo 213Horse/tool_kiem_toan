@@ -7,7 +7,8 @@ Chạy trên Windows và macOS
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import pandas as pd
+# Lazy import pandas - chỉ import khi cần thiết để tăng tốc độ khởi động
+# import pandas as pd  # Đã chuyển sang lazy import
 import os
 from pathlib import Path
 import sys
@@ -16,6 +17,8 @@ import shutil
 import time
 import traceback
 import base64
+import signal
+import atexit
 
 class KiemKhoApp:
     def __init__(self, root):
@@ -25,6 +28,15 @@ class KiemKhoApp:
         self.root.geometry("1200x800")
         # Màu nền nhẹ nhàng hơn
         self.root.configure(bg='#F5F5F5')
+        
+        # Import pandas ngay sau khi UI được tạo (để có thể dùng trong toàn bộ class)
+        # Import sớm hơn một chút để tránh lỗi "name 'pd' is not defined"
+        try:
+            import pandas as pd
+            self.pd = pd  # Lưu vào instance để dùng trong các method khác
+        except ImportError:
+            self.pd = None
+            # Sẽ báo lỗi khi load_data được gọi
         
         # Biến lưu trữ dữ liệu
         self.df = None
@@ -43,6 +55,9 @@ class KiemKhoApp:
         self.notebook = None  # Notebook widget để chứa các tab
         self.tong_hop_tree = None  # Treeview trong tab Tổng hợp
         self.so_tua_da_quet_var = None  # Biến để hiển thị số tựa đã quét
+        self.tong_hop_edit_entry = None  # Entry widget để chỉnh sửa trong tab Tổng hợp
+        self.tong_hop_editing_item = None  # Item đang được chỉnh sửa trong tab Tổng hợp
+        self.tong_hop_editing_column = None  # Cột đang được chỉnh sửa trong tab Tổng hợp
         
         # Load cấu hình từ file (nếu có)
         saved_config = self.load_config()
@@ -98,10 +113,7 @@ class KiemKhoApp:
                 self.root.quit()
                 return
         
-        # Load dữ liệu từ Excel
-        self.load_data()
-        
-        # Tạo giao diện
+        # Tạo giao diện TRƯỚC để hiển thị nhanh hơn (tối ưu tốc độ khởi động)
         self.create_ui()
         
         # Tự động điều chỉnh kích thước cửa sổ để hiển thị đủ tất cả các phần tử
@@ -117,6 +129,22 @@ class KiemKhoApp:
         
         # Bind Enter key để hỗ trợ quét mã vạch
         self.root.bind('<Return>', self.on_enter_pressed)
+        
+        # Bind sự kiện đóng cửa sổ để kiểm tra dữ liệu chưa lưu
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+        # Kiểm tra và khôi phục dữ liệu backup nếu có
+        self.check_and_restore_backup()
+        
+        # Load dữ liệu SAU KHI UI đã hiển thị (defer loading để tăng tốc độ khởi động)
+        # Sử dụng after() để load dữ liệu sau khi UI đã render xong (100ms delay)
+        self.root.after(100, self.load_data_deferred)
+        
+        # Bắt đầu auto-save định kỳ (mỗi 30 giây)
+        self.start_auto_save()
+        
+        # Đăng ký xử lý signal để lưu backup khi shutdown (cúp điện, tắt máy)
+        self.setup_signal_handlers()
     
     def get_config_location_file(self):
         """Lấy đường dẫn file pointer trỏ đến vị trí config thực sự"""
@@ -895,6 +923,17 @@ class KiemKhoApp:
     
     def load_data(self):
         """Load dữ liệu từ file Excel"""
+        # Sử dụng pandas đã được import trong __init__
+        if self.pd is None:
+            try:
+                import pandas as pd
+                self.pd = pd
+            except ImportError:
+                messagebox.showerror("Lỗi", "Không thể import pandas! Vui lòng cài đặt: pip install pandas")
+                sys.exit(1)
+        
+        pd = self.pd  # Alias để dùng trong hàm này
+        
         try:
             # Kiểm tra nếu đang chạy từ executable (PyInstaller)
             if getattr(sys, 'frozen', False):
@@ -1095,6 +1134,12 @@ class KiemKhoApp:
                 )
                 if excel_path:
                     try:
+                        # Đảm bảo pandas đã được import
+                        if self.pd is None:
+                            import pandas as pd
+                            self.pd = pd
+                        pd = self.pd
+                        
                         # Thử đọc lại với file mới
                         if Path(excel_path).suffix.lower() == '.xls':
                             self.df = pd.read_excel(excel_path, engine='xlrd')
@@ -1112,8 +1157,32 @@ class KiemKhoApp:
             else:
                 sys.exit(1)
     
+    def load_data_deferred(self):
+        """Load dữ liệu sau khi UI đã hiển thị (deferred loading để tăng tốc độ khởi động)"""
+        try:
+            # Cập nhật cursor để hiển thị đang load
+            self.root.config(cursor='wait')
+            self.root.update_idletasks()
+            
+            # Load dữ liệu
+            self.load_data()
+        finally:
+            # Khôi phục cursor
+            self.root.config(cursor='')
+    
     def _process_dataframe(self):
         """Xử lý DataFrame sau khi đọc thành công"""
+        # Đảm bảo pandas đã được import
+        if self.pd is None:
+            try:
+                import pandas as pd
+                self.pd = pd
+            except ImportError:
+                messagebox.showerror("Lỗi", "Không thể import pandas! Vui lòng cài đặt: pip install pandas")
+                return
+        
+        pd = self.pd  # Alias để dùng trong hàm này
+        
         # Chuẩn hóa tên cột (loại bỏ khoảng trắng thừa, chuyển sang lowercase)
         self.df.columns = self.df.columns.str.strip()
         
@@ -1438,6 +1507,12 @@ class KiemKhoApp:
         
         tonghop_table_frame.grid_rowconfigure(0, weight=1)
         tonghop_table_frame.grid_columnconfigure(0, weight=1)
+        
+        # Bind events để cho phép chỉnh sửa và xóa dòng trong tab Tổng hợp
+        self.tong_hop_tree.bind('<Double-1>', self.on_tong_hop_item_click)
+        self.tong_hop_tree.bind('<Button-1>', self.on_tong_hop_item_click)
+        self.tong_hop_tree.bind('<Delete>', self.on_tong_hop_delete)
+        self.tong_hop_tree.bind('<Key-Delete>', self.on_tong_hop_delete)
     
     def get_all_box_numbers(self):
         """Lấy danh sách tất cả mã thùng từ dữ liệu đầu vào"""
@@ -1818,6 +1893,17 @@ class KiemKhoApp:
                     self.isbn_entry.delete(0, tk.END)
                     return
                 
+                # Đảm bảo pandas đã được import
+                if self.pd is None:
+                    try:
+                        import pandas as pd
+                        self.pd = pd
+                    except ImportError:
+                        messagebox.showerror("Lỗi", "Không thể import pandas!")
+                        return
+                
+                pd = self.pd  # Alias để dùng trong hàm này
+                
                 # Lấy thông tin từ matched_row
                 # Tìm cột 'tua' (có thể là 'tua' sau khi mapping hoặc tên gốc)
                 tua = ''
@@ -2147,6 +2233,8 @@ class KiemKhoApp:
                 # Kiểm tra và highlight nếu khác nhau - CHỈ chạy cho cột Tồn thực tế
                 if isbn in self.scanned_items:
                     self.scanned_items[isbn]['ton_thuc_te'] = new_value
+                    # Lưu backup khi có thay đổi
+                    self.save_backup_on_change()
                     ton_trong_thung = self.scanned_items[isbn]['ton_trong_thung']
                     
                     try:
@@ -2230,6 +2318,9 @@ class KiemKhoApp:
                             # Cập nhật ghi chú đã làm sạch
                             self.scanned_items[isbn]['ghi_chu'] = values[7]
                             
+                            # Lưu backup khi có thay đổi
+                            self.save_backup_on_change()
+                            
                             # Cập nhật tree
                             self.tree.item(item, values=values)
                             
@@ -2311,6 +2402,8 @@ class KiemKhoApp:
                 values[7] = new_value
                 if isbn in self.scanned_items:
                     self.scanned_items[isbn]['ghi_chu'] = new_value
+                    # Lưu backup khi có thay đổi
+                    self.save_backup_on_change()
                 # Cập nhật tree với giá trị mới
                 self.tree.item(item, values=values)
                 # Đảm bảo không có highlight nào che mất nội dung cột "Ghi chú"
@@ -2801,13 +2894,19 @@ class KiemKhoApp:
         # Kiểm tra ràng buộc: Số tựa đã quét phải bằng số tựa trong thùng
         if self.current_box_data is not None and not self.current_box_data.empty and self.current_box_number:
             so_tua_trong_thung = len(self.current_box_data)
-            so_tua_da_quet = len(self.scanned_items)
+            so_tua_da_quet_lan_nay = len(self.scanned_items)
             
-            if so_tua_da_quet < so_tua_trong_thung:
+            # QUAN TRỌNG: Đếm cả các tựa đã lưu trong tab Tổng hợp từ các lần save trước
+            so_tua_da_luu_truoc = self.count_scanned_titles_for_box(self.current_box_number) if self.current_box_number else 0
+            
+            # Tổng số tựa đã quét = số tựa quét lần này + số tựa đã lưu trước đó
+            so_tua_da_quet_tong = so_tua_da_quet_lan_nay + so_tua_da_luu_truoc
+            
+            if so_tua_da_quet_tong < so_tua_trong_thung:
                 # Tạo dialog tùy chỉnh với 2 nút
                 dialog = tk.Toplevel(self.root)
                 dialog.title("Cảnh báo")
-                dialog.geometry("550x320")
+                dialog.geometry("600x400")
                 dialog.resizable(False, False)
                 dialog.transient(self.root)
                 dialog.grab_set()
@@ -2815,12 +2914,12 @@ class KiemKhoApp:
                 
                 # Đặt dialog ở giữa màn hình
                 dialog.update_idletasks()
-                x = (dialog.winfo_screenwidth() // 2) - (550 // 2)
-                y = (dialog.winfo_screenheight() // 2) - (320 // 2)
-                dialog.geometry(f"550x320+{x}+{y}")
+                x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
+                y = (dialog.winfo_screenheight() // 2) - (400 // 2)
+                dialog.geometry(f"600x400+{x}+{y}")
                 
-                # Frame chính với padding lớn hơn
-                main_frame = tk.Frame(dialog, padx=30, pady=25, bg='#f5f5f5')
+                # Frame chính với padding đủ để các nút không bị che
+                main_frame = tk.Frame(dialog, padx=30, pady=30, bg='#f5f5f5')
                 main_frame.pack(fill=tk.BOTH, expand=True)
                 
                 # Icon cảnh báo
@@ -2829,16 +2928,27 @@ class KiemKhoApp:
                 icon_label = tk.Label(icon_frame, text="⚠️", font=('Arial', 32), bg='#f5f5f5')
                 icon_label.pack()
                 
-                # Thông điệp
-                message_text = (
-                    f"Chưa quét đủ số tựa trong thùng!\n\n"
-                    f"Thùng {self.current_box_number} có {so_tua_trong_thung} tựa.\n"
-                    f"Đã quét: {so_tua_da_quet} tựa.\n"
-                    f"Còn thiếu: {so_tua_trong_thung - so_tua_da_quet} tựa.\n\n"
-                    f"Bạn muốn tiếp tục lưu hay hủy để quét tiếp?"
-                )
+                # Thông điệp - hiển thị cả số tựa đã lưu trước đó
+                if so_tua_da_luu_truoc > 0:
+                    message_text = (
+                        f"Chưa quét đủ số tựa trong thùng!\n\n"
+                        f"Thùng {self.current_box_number} có {so_tua_trong_thung} tựa.\n"
+                        f"Đã quét lần này: {so_tua_da_quet_lan_nay} tựa.\n"
+                        f"Đã lưu trước đó: {so_tua_da_luu_truoc} tựa.\n"
+                        f"Tổng đã quét: {so_tua_da_quet_tong} tựa.\n"
+                        f"Còn thiếu: {so_tua_trong_thung - so_tua_da_quet_tong} tựa.\n\n"
+                        f"Bạn muốn tiếp tục lưu hay hủy để quét tiếp?"
+                    )
+                else:
+                    message_text = (
+                        f"Chưa quét đủ số tựa trong thùng!\n\n"
+                        f"Thùng {self.current_box_number} có {so_tua_trong_thung} tựa.\n"
+                        f"Đã quét: {so_tua_da_quet_lan_nay} tựa.\n"
+                        f"Còn thiếu: {so_tua_trong_thung - so_tua_da_quet_lan_nay} tựa.\n\n"
+                        f"Bạn muốn tiếp tục lưu hay hủy để quét tiếp?"
+                    )
                 message_frame = tk.Frame(main_frame, bg='#f5f5f5')
-                message_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 25))
+                message_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
                 message_label = tk.Label(
                     message_frame, 
                     text=message_text,
@@ -2846,13 +2956,13 @@ class KiemKhoApp:
                     justify=tk.CENTER,
                     bg='#f5f5f5',
                     fg='#333333',
-                    wraplength=480
+                    wraplength=540
                 )
                 message_label.pack()
                 
-                # Frame chứa các nút với spacing tốt hơn
+                # Frame chứa các nút với padding đủ để không bị che
                 button_frame = tk.Frame(main_frame, bg='#f5f5f5')
-                button_frame.pack(pady=(10, 0))
+                button_frame.pack(pady=(15, 25))
                 
                 # Biến để lưu kết quả
                 result = {'value': None}
@@ -3110,13 +3220,185 @@ class KiemKhoApp:
             messagebox.showerror("Lỗi", f"Không thể cập nhật bảng tổng hợp: {str(e)}\n\nSố lượng dữ liệu: {len(self.tong_hop_data)}")
             print(f"Lỗi khi update_tong_hop_table: {str(e)}")
     
+    def on_tong_hop_item_click(self, event):
+        """Xử lý click để edit trực tiếp các cột có thể chỉnh sửa trong tab Tổng hợp"""
+        # Hủy edit cũ nếu có
+        if self.tong_hop_edit_entry:
+            self.finish_tong_hop_edit()
+        
+        region = self.tong_hop_tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        
+        item = self.tong_hop_tree.identify_row(event.y)
+        column = self.tong_hop_tree.identify_column(event.x)
+        column_index = int(column.replace('#', '')) - 1
+        
+        # Cho phép edit: Vị trí mới (3), Tồn thực tế (6), Tình trạng (8), Ghi chú (9), Note thùng (10)
+        # Không cho edit: N/X (0), Số phiếu (1), Ngày (2), ISBN (4), Tựa (5), Số thùng (7) - chỉ đọc
+        editable_columns = [3, 6, 8, 9, 10]  # Vị trí mới, Tồn thực tế, Tình trạng, Ghi chú, Note thùng
+        if column_index not in editable_columns:
+            return
+        
+        if not item:
+            return
+        
+        # Lấy giá trị hiện tại
+        values = list(self.tong_hop_tree.item(item, 'values'))
+        current_value = values[column_index] if column_index < len(values) else ''
+        
+        # Lấy vị trí của cell
+        bbox = self.tong_hop_tree.bbox(item, column)
+        if not bbox:
+            return
+        
+        x, y, width, height = bbox
+        
+        # Tạo Entry widget để edit trực tiếp
+        self.tong_hop_edit_entry = tk.Entry(self.tong_hop_tree, font=('Arial', 10), 
+                                           relief=tk.FLAT, bd=0, bg='#FFFFFF', fg='#000000')
+        self.tong_hop_edit_entry.insert(0, str(current_value))
+        self.tong_hop_edit_entry.select_range(0, tk.END)
+        self.tong_hop_edit_entry.place(x=x, y=y, width=width, height=height)
+        self.tong_hop_edit_entry.focus()
+        self.tong_hop_editing_item = item
+        self.tong_hop_editing_column = column_index
+        
+        def finish_on_enter(event):
+            self.finish_tong_hop_edit()
+        
+        def finish_on_focus_out(event):
+            # Delay một chút để tránh conflict với click events
+            self.root.after(100, self.finish_tong_hop_edit)
+        
+        self.tong_hop_edit_entry.bind('<Return>', finish_on_enter)
+        self.tong_hop_edit_entry.bind('<FocusOut>', finish_on_focus_out)
+        self.tong_hop_edit_entry.bind('<Escape>', lambda e: self.cancel_tong_hop_edit())
+    
+    def finish_tong_hop_edit(self):
+        """Hoàn tất việc chỉnh sửa trong tab Tổng hợp"""
+        if not self.tong_hop_edit_entry or not self.tong_hop_editing_item:
+            return
+        
+        try:
+            # Lấy giá trị mới
+            new_value = self.tong_hop_edit_entry.get()
+            
+            # Lấy item ID và column index
+            item_id = self.tong_hop_editing_item
+            column_index = self.tong_hop_editing_column
+            
+            # Lấy giá trị hiện tại của dòng
+            values = list(self.tong_hop_tree.item(item_id, 'values'))
+            
+            # Cập nhật giá trị trong tree
+            values[column_index] = new_value
+            self.tong_hop_tree.item(item_id, values=values)
+            
+            # Tìm index của item trong tree để map với tong_hop_data
+            all_items = list(self.tong_hop_tree.get_children())
+            if item_id in all_items:
+                data_index = all_items.index(item_id)
+                
+                # Cập nhật trong tong_hop_data theo index
+                if 0 <= data_index < len(self.tong_hop_data):
+                    # Map column index sang tên cột trong data
+                    column_mapping = {
+                        3: 'Vị trí mới',
+                        6: 'Tồn thực tế',
+                        8: 'Tình trạng',
+                        9: 'Ghi chú',
+                        10: 'Note thùng'
+                    }
+                    
+                    column_name = column_mapping.get(column_index)
+                    if column_name:
+                        self.tong_hop_data[data_index][column_name] = new_value
+                        # Lưu backup khi chỉnh sửa
+                        self.save_backup_on_change()
+            
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Không thể cập nhật dữ liệu: {str(e)}")
+        finally:
+            # Xóa entry widget
+            if self.tong_hop_edit_entry:
+                try:
+                    self.tong_hop_edit_entry.destroy()
+                except:
+                    pass
+                self.tong_hop_edit_entry = None
+            self.tong_hop_editing_item = None
+            self.tong_hop_editing_column = None
+    
+    def cancel_tong_hop_edit(self):
+        """Hủy việc chỉnh sửa trong tab Tổng hợp"""
+        if self.tong_hop_edit_entry:
+            try:
+                self.tong_hop_edit_entry.destroy()
+            except:
+                pass
+            self.tong_hop_edit_entry = None
+        self.tong_hop_editing_item = None
+        self.tong_hop_editing_column = None
+    
+    def on_tong_hop_delete(self, event):
+        """Xóa dòng được chọn trong tab Tổng hợp"""
+        selected_items = self.tong_hop_tree.selection()
+        if not selected_items:
+            return
+        
+        # Xác nhận xóa
+        result = messagebox.askyesno("Xác nhận", f"Bạn có chắc chắn muốn xóa {len(selected_items)} dòng đã chọn?")
+        if not result:
+            return
+        
+        try:
+            # Lấy tất cả items trong tree theo thứ tự
+            all_items = list(self.tong_hop_tree.get_children())
+            
+            # Tìm index của các items được chọn
+            selected_indices = []
+            for item_id in selected_items:
+                if item_id in all_items:
+                    selected_indices.append(all_items.index(item_id))
+            
+            # Sắp xếp theo thứ tự ngược lại để xóa từ cuối lên (tránh lỗi index)
+            selected_indices.sort(reverse=True)
+            
+            # Xóa từ tong_hop_data trước (theo index)
+            for idx in selected_indices:
+                if 0 <= idx < len(self.tong_hop_data):
+                    del self.tong_hop_data[idx]
+            
+            # Xóa khỏi tree
+            for item_id in selected_items:
+                self.tong_hop_tree.delete(item_id)
+            
+            # Lưu backup sau khi xóa
+            self.save_backup()
+            
+            messagebox.showinfo("Thành công", f"Đã xóa {len(selected_items)} dòng!")
+            
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Không thể xóa dòng: {str(e)}")
+            traceback.print_exc()
+    
     def export_tong_hop_excel(self):
         """Xuất file Excel tổng hợp (logic giống save_data cũ)"""
         if not self.tong_hop_data:
             messagebox.showwarning("Cảnh báo", "Chưa có dữ liệu tổng hợp để xuất!")
             return
         
-        # Tạo DataFrame từ tổng hợp data
+        # Sử dụng pandas đã được import trong __init__
+        if self.pd is None:
+            try:
+                import pandas as pd
+                self.pd = pd
+            except ImportError:
+                messagebox.showerror("Lỗi", "Không thể import pandas! Vui lòng cài đặt: pip install pandas")
+                return
+        
+        pd = self.pd  # Alias để dùng trong hàm này
         df_save = pd.DataFrame(self.tong_hop_data)
         
         # Tạo tên file theo format
@@ -3243,14 +3525,450 @@ class KiemKhoApp:
             error_msg = str(e)
             traceback.print_exc()
             messagebox.showerror("Lỗi", f"Không thể lưu file: {error_msg}")
+    
+    def get_backup_file_path(self):
+        """Lấy đường dẫn file backup - luôn lưu cùng thư mục với file application"""
+        if getattr(sys, 'frozen', False):
+            # Chạy từ executable - lưu cùng thư mục với file .exe
+            return Path(sys.executable).parent / "kiem_kho_backup.json"
+        else:
+            # Chạy từ source code - lưu cùng thư mục với file .py
+            return Path(__file__).parent / "kiem_kho_backup.json"
+    
+    def save_backup(self):
+        """Tự động lưu backup dữ liệu (scanned_items và tong_hop_data)"""
+        try:
+            backup_file = self.get_backup_file_path()
+            backup_data = {
+                'scanned_items': self.scanned_items,
+                'tong_hop_data': self.tong_hop_data,
+                'current_box_number': self.current_box_number,
+                'timestamp': time.time()
+            }
+            
+            # Lưu vào file tạm trước, sau đó rename để tránh mất dữ liệu khi crash
+            temp_file = backup_file.with_suffix('.tmp')
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(backup_data, f, ensure_ascii=False, indent=2)
+            
+            # Rename file tạm thành file chính (atomic operation)
+            if backup_file.exists():
+                backup_file.unlink()
+            temp_file.rename(backup_file)
+            
+        except Exception as e:
+            # Không hiển thị lỗi cho người dùng vì đây là auto-save
+            print(f"Lỗi khi lưu backup: {str(e)}")
+    
+    def check_and_restore_backup(self):
+        """Kiểm tra và khôi phục dữ liệu backup nếu có"""
+        try:
+            backup_file = self.get_backup_file_path()
+            if not backup_file.exists():
+                return  # Không có backup
+            
+            # Đọc backup
+            with open(backup_file, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            scanned_items_backup = backup_data.get('scanned_items', {})
+            tong_hop_data_backup = backup_data.get('tong_hop_data', [])
+            current_box_number_backup = backup_data.get('current_box_number')
+            timestamp = backup_data.get('timestamp', 0)
+            
+            # Kiểm tra xem có dữ liệu để khôi phục không
+            has_scanned_items = scanned_items_backup and len(scanned_items_backup) > 0
+            has_tong_hop_data = tong_hop_data_backup and len(tong_hop_data_backup) > 0
+            
+            if not has_scanned_items and not has_tong_hop_data:
+                return  # Không có dữ liệu để khôi phục
+            
+            # Hiển thị dialog cho phép người dùng chọn khôi phục
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Khôi phục dữ liệu")
+            dialog.geometry("600x400")
+            dialog.resizable(False, False)
+            dialog.transient(self.root)
+            dialog.grab_set()
+            dialog.configure(bg='#f5f5f5')
+            
+            # Đặt dialog ở phía trên cửa sổ chính để không che các nút SAVE/RESET
+            dialog.update_idletasks()
+            # Lấy vị trí của cửa sổ chính
+            root_x = self.root.winfo_x()
+            root_y = self.root.winfo_y()
+            root_width = self.root.winfo_width()
+            # Đặt dialog ở giữa theo chiều ngang của cửa sổ chính, nhưng ở phía trên
+            x = root_x + (root_width // 2) - (600 // 2)
+            y = root_y + 100  # Đặt cách đỉnh cửa sổ chính 100px để không che các nút
+            dialog.geometry(f"600x400+{x}+{y}")
+            
+            # Frame chính với padding đủ để các nút không bị che
+            main_frame = tk.Frame(dialog, padx=30, pady=30, bg='#f5f5f5')
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Icon thông tin
+            icon_frame = tk.Frame(main_frame, bg='#f5f5f5')
+            icon_frame.pack(pady=(0, 15))
+            icon_label = tk.Label(icon_frame, text="💾", font=('Arial', 32), bg='#f5f5f5')
+            icon_label.pack()
+            
+            # Thông điệp
+            from datetime import datetime
+            backup_time = datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %H:%M:%S") if timestamp else "Không xác định"
+            
+            message_text = (
+                f"Phát hiện dữ liệu backup từ lần chạy trước!\n\n"
+                f"Thời gian backup: {backup_time}\n\n"
+            )
+            
+            if has_scanned_items:
+                message_text += f"• Dữ liệu đang quét: {len(scanned_items_backup)} tựa\n"
+            if has_tong_hop_data:
+                message_text += f"• Dữ liệu tổng hợp: {len(tong_hop_data_backup)} dòng\n"
+            if current_box_number_backup:
+                message_text += f"• Thùng đang kiểm kê: {current_box_number_backup}\n"
+            
+            message_text += "\nBạn có muốn khôi phục dữ liệu này không?"
+            
+            message_frame = tk.Frame(main_frame, bg='#f5f5f5')
+            message_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+            message_label = tk.Label(
+                message_frame, 
+                text=message_text,
+                font=('Arial', 12),
+                justify=tk.CENTER,
+                bg='#f5f5f5',
+                fg='#333333',
+                wraplength=540
+            )
+            message_label.pack()
+            
+            # Frame chứa các nút với padding đủ để không bị che
+            button_frame = tk.Frame(main_frame, bg='#f5f5f5')
+            button_frame.pack(pady=(15, 25))
+            
+            result = {'value': None}
+            
+            def on_restore():
+                result['value'] = 'restore'
+                dialog.destroy()
+            
+            def on_discard():
+                result['value'] = 'discard'
+                dialog.destroy()
+            
+            # Nút "Khôi phục"
+            restore_btn = tk.Button(
+                button_frame,
+                text="Khôi phục",
+                command=on_restore,
+                font=('Arial', 12, 'bold'),
+                bg='#4CAF50',
+                fg='white',
+                padx=25,
+                pady=12,
+                relief=tk.FLAT,
+                cursor='hand2',
+                activebackground='#45a049',
+                activeforeground='white',
+                bd=0,
+                highlightthickness=0
+            )
+            restore_btn.pack(side=tk.LEFT, padx=15)
+            
+            # Nút "Bỏ qua"
+            discard_btn = tk.Button(
+                button_frame,
+                text="Bỏ qua",
+                command=on_discard,
+                font=('Arial', 12, 'bold'),
+                bg='#757575',
+                fg='white',
+                padx=25,
+                pady=12,
+                relief=tk.FLAT,
+                cursor='hand2',
+                activebackground='#616161',
+                activeforeground='white',
+                bd=0,
+                highlightthickness=0
+            )
+            discard_btn.pack(side=tk.LEFT, padx=15)
+            
+            # Đợi dialog đóng
+            dialog.wait_window()
+            
+            # Xử lý kết quả
+            if result['value'] == 'restore':
+                # Khôi phục dữ liệu
+                self.scanned_items = scanned_items_backup
+                self.tong_hop_data = tong_hop_data_backup
+                self.current_box_number = current_box_number_backup
+                
+                # Cập nhật UI sau khi khôi phục
+                if hasattr(self, 'tong_hop_tree') and self.tong_hop_tree:
+                    self.update_tong_hop_table()
+                
+                # Nếu có dữ liệu đang quét, hiển thị lại trong bảng
+                if self.scanned_items:
+                    # Hiển thị lại dữ liệu đã quét trong bảng
+                    self.clear_table()
+                    for isbn, info in self.scanned_items.items():
+                        # Tạo lại item trong tree
+                        item_id = self.tree.insert('', tk.END, values=(
+                            len(self.tree.get_children()) + 1,  # STT
+                            isbn,
+                            info.get('tua', ''),
+                            info.get('ton_thuc_te', ''),
+                            info.get('so_thung', ''),
+                            info.get('ton_trong_thung', ''),
+                            info.get('tinh_trang', ''),
+                            info.get('ghi_chu', '')
+                        ))
+                        # Cập nhật item_id trong scanned_items
+                        info['item_id'] = item_id
+                    
+                    # Cập nhật số tựa đã quét
+                    if hasattr(self, 'so_tua_var'):
+                        self.so_tua_var.set(str(len(self.scanned_items)))
+                    if hasattr(self, 'so_tua_da_quet_var') and self.current_box_number:
+                        so_tua_da_quet = self.count_scanned_titles_for_box(self.current_box_number)
+                        self.so_tua_da_quet_var.set(str(so_tua_da_quet))
+                    
+                    # Cập nhật số thùng nếu có
+                    if hasattr(self, 'so_thung_var') and self.current_box_number:
+                        self.so_thung_var.set(self.current_box_number)
+                
+                messagebox.showinfo("Thành công", 
+                    f"Đã khôi phục dữ liệu!\n\n"
+                    f"Dữ liệu đang quét: {len(self.scanned_items)} tựa\n"
+                    f"Dữ liệu tổng hợp: {len(self.tong_hop_data)} dòng")
+            else:
+                # Người dùng không muốn khôi phục - giữ nguyên file backup (không xóa)
+                pass
+        
+        except Exception as e:
+            # Không hiển thị lỗi cho người dùng, chỉ log
+            print(f"Lỗi khi khôi phục backup: {str(e)}")
+    
+    def start_auto_save(self):
+        """Bắt đầu auto-save định kỳ (mỗi 30 giây)"""
+        def auto_save_periodic():
+            # Chỉ lưu nếu có dữ liệu
+            if self.scanned_items or self.tong_hop_data:
+                self.save_backup()
+            # Lên lịch lại sau 30 giây
+            self.root.after(30000, auto_save_periodic)
+        
+        # Bắt đầu auto-save ngay lập tức, sau đó mỗi 30 giây
+        auto_save_periodic()  # Chạy ngay lần đầu
+    
+    def save_backup_on_change(self):
+        """Lưu backup ngay lập tức khi có thay đổi dữ liệu"""
+        # Delay một chút để tránh lưu quá nhiều lần
+        if hasattr(self, '_backup_scheduled'):
+            self.root.after_cancel(self._backup_scheduled)
+        
+        def do_save():
+            self.save_backup()
+            self._backup_scheduled = None
+        
+        self._backup_scheduled = self.root.after(2000, do_save)  # Lưu sau 2 giây
+    
+    def setup_signal_handlers(self):
+        """Đăng ký xử lý signal để lưu backup khi shutdown (cúp điện, tắt máy)"""
+        def signal_handler(signum, frame):
+            """Xử lý signal shutdown - lưu backup ngay lập tức"""
+            try:
+                # Hủy scheduled backup nếu có để tránh conflict
+                if hasattr(self, '_backup_scheduled') and self._backup_scheduled:
+                    try:
+                        self.root.after_cancel(self._backup_scheduled)
+                    except:
+                        pass
+                
+                # Lưu backup ngay lập tức
+                if self.scanned_items or self.tong_hop_data:
+                    self.save_backup()
+                    print(f"Đã lưu backup khi nhận signal {signum}")
+            except Exception as e:
+                print(f"Lỗi khi lưu backup trong signal handler: {str(e)}")
+        
+        def atexit_handler():
+            """Xử lý khi exit - lưu backup"""
+            try:
+                if self.scanned_items or self.tong_hop_data:
+                    self.save_backup()
+                    print("Đã lưu backup khi exit")
+            except Exception as e:
+                print(f"Lỗi khi lưu backup trong atexit handler: {str(e)}")
+        
+        # Đăng ký signal handlers (chỉ trên Unix/Linux/macOS, Windows không hỗ trợ tốt)
+        if hasattr(signal, 'SIGTERM'):
+            try:
+                signal.signal(signal.SIGTERM, signal_handler)
+            except:
+                pass
+        
+        if hasattr(signal, 'SIGINT'):
+            try:
+                signal.signal(signal.SIGINT, signal_handler)
+            except:
+                pass
+        
+        # Đăng ký atexit handler (hoạt động trên cả Windows và Unix)
+        atexit.register(atexit_handler)
+    
+    def on_closing(self):
+        """Xử lý sự kiện đóng cửa sổ - kiểm tra dữ liệu chưa lưu"""
+        # Kiểm tra xem có dữ liệu chưa lưu không (cả scanned_items và tong_hop_data)
+        has_scanned_items = self.scanned_items and len(self.scanned_items) > 0
+        has_tong_hop_data = self.tong_hop_data and len(self.tong_hop_data) > 0
+        
+        if has_scanned_items or has_tong_hop_data:
+            # Có dữ liệu chưa lưu, hiển thị dialog cảnh báo
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Cảnh báo")
+            dialog.geometry("600x320")
+            dialog.resizable(False, False)
+            dialog.transient(self.root)
+            dialog.grab_set()
+            dialog.configure(bg='#f5f5f5')
+            
+            # Đặt dialog ở giữa màn hình
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
+            y = (dialog.winfo_screenheight() // 2) - (320 // 2)
+            dialog.geometry(f"600x320+{x}+{y}")
+            
+            # Frame chính với padding lớn hơn
+            main_frame = tk.Frame(dialog, padx=30, pady=25, bg='#f5f5f5')
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Icon cảnh báo
+            icon_frame = tk.Frame(main_frame, bg='#f5f5f5')
+            icon_frame.pack(pady=(0, 15))
+            icon_label = tk.Label(icon_frame, text="⚠️", font=('Arial', 32), bg='#f5f5f5')
+            icon_label.pack()
+            
+            # Thông điệp
+            message_parts = []
+            if has_scanned_items:
+                message_parts.append(f"• {len(self.scanned_items)} tựa đang quét chưa được lưu vào Tổng hợp")
+            if has_tong_hop_data:
+                message_parts.append(f"• {len(self.tong_hop_data)} dòng dữ liệu trong tab Tổng hợp chưa được lưu backup")
+            
+            message_text = (
+                f"Bạn có muốn lưu backup dữ liệu trước khi đóng phần mềm không?\n\n"
+                + "\n".join(message_parts) + "\n\n"
+                f"Bạn muốn làm gì?"
+            )
+            
+            message_frame = tk.Frame(main_frame, bg='#f5f5f5')
+            message_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 25))
+            message_label = tk.Label(
+                message_frame,
+                text=message_text,
+                font=('Arial', 12),
+                justify=tk.CENTER,
+                bg='#f5f5f5',
+                fg='#333333',
+                wraplength=540
+            )
+            message_label.pack()
+            
+            # Frame chứa các nút
+            button_frame = tk.Frame(main_frame, bg='#f5f5f5')
+            button_frame.pack(pady=(10, 0))
+            
+            result = {'value': None}
+            
+            def on_save():
+                result['value'] = 'save'
+                dialog.destroy()
+            
+            def on_close():
+                result['value'] = 'close'
+                dialog.destroy()
+            
+            # Nút "Lưu"
+            save_btn = tk.Button(
+                button_frame,
+                text="Lưu",
+                command=on_save,
+                font=('Arial', 12, 'bold'),
+                bg='#4CAF50',
+                fg='white',
+                padx=25,
+                pady=12,
+                relief=tk.FLAT,
+                cursor='hand2',
+                activebackground='#45a049',
+                activeforeground='white',
+                bd=0,
+                highlightthickness=0
+            )
+            save_btn.pack(side=tk.LEFT, padx=15)
+            
+            # Nút "Đóng không lưu"
+            close_btn = tk.Button(
+                button_frame,
+                text="Đóng không lưu",
+                command=on_close,
+                font=('Arial', 12, 'bold'),
+                bg='#757575',
+                fg='white',
+                padx=25,
+                pady=12,
+                relief=tk.FLAT,
+                cursor='hand2',
+                activebackground='#616161',
+                activeforeground='white',
+                bd=0,
+                highlightthickness=0
+            )
+            close_btn.pack(side=tk.LEFT, padx=15)
+            
+            # Đợi dialog đóng
+            dialog.wait_window()
+            
+            # Xử lý kết quả
+            if result['value'] == 'save':
+                # Lưu vào backup file trước khi đóng
+                try:
+                    self.save_backup()
+                    # Sau khi lưu backup xong, đóng phần mềm
+                    self.root.quit()
+                    self.root.destroy()
+                except Exception as e:
+                    # Nếu lưu backup lỗi, hỏi lại có muốn đóng không
+                    error_result = messagebox.askyesno(
+                        "Lỗi",
+                        f"Không thể lưu backup: {str(e)}\n\n"
+                        f"Bạn có muốn đóng phần mềm mà không lưu không?"
+                    )
+                    if error_result:
+                        self.root.quit()
+                        self.root.destroy()
+            elif result['value'] == 'close':
+                # Đóng phần mềm luôn, không lưu gì cả
+                self.root.quit()
+                self.root.destroy()
+            # Nếu result['value'] là None (người dùng đóng dialog bằng X), không làm gì cả
+        else:
+            # Không có dữ liệu chưa lưu, đóng phần mềm bình thường
+            self.root.quit()
+            self.root.destroy()
 
 def main():
     try:
         root = tk.Tk()
-        # Đảm bảo root window được hiển thị ngay từ đầu
+        # Hiển thị window ngay lập tức để tăng tốc độ khởi động (perceived speed)
         root.deiconify()
-        root.update()
+        root.update_idletasks()  # Cập nhật UI ngay lập tức
         
+        # Tạo app (sẽ load dữ liệu sau khi UI hiển thị)
         app = KiemKhoApp(root)
         
         # Kiểm tra xem app đã được khởi tạo thành công chưa

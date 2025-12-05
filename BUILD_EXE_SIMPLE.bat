@@ -25,14 +25,14 @@ echo.
 
 REM Install required libraries
 echo [INFO] Installing required libraries...
-pip install --quiet --upgrade pip
+python -m pip install --quiet --upgrade pip
 
 if exist "requirements.txt" (
     echo [INFO] Installing from requirements.txt...
-    pip install --quiet -r requirements.txt
+    python -m pip install --quiet -r requirements.txt
 ) else (
     echo [INFO] Installing libraries directly...
-    pip install --quiet pandas openpyxl xlrd pyinstaller
+    python -m pip install --quiet pandas openpyxl xlrd pyinstaller
 )
 
 if errorlevel 1 (
@@ -42,6 +42,24 @@ if errorlevel 1 (
 )
 
 echo [OK] Libraries installed successfully
+echo.
+
+REM Verify PyInstaller installation
+echo [INFO] Verifying PyInstaller installation...
+python -m PyInstaller --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] PyInstaller not found after installation!
+    echo [INFO] Trying to install PyInstaller directly...
+    python -m pip install --quiet pyinstaller
+    python -m PyInstaller --version >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] Still cannot find PyInstaller!
+        echo [INFO] Please install manually: python -m pip install pyinstaller
+        pause
+        exit /b 1
+    )
+)
+echo [OK] PyInstaller verified successfully
 echo.
 
 REM Delete old build folders
@@ -73,7 +91,7 @@ echo # File này được tạo tự động khi build exe > dist_path_config.py
 echo # Chứa đường dẫn thư mục dist gốc >> dist_path_config.py
 echo DIST_PATH = None  # Sẽ được cập nhật sau khi build >> dist_path_config.py
 
-pyinstaller --onefile --windowed --name "KiemKhoApp" ^
+python -m PyInstaller --onefile --windowed --name "KiemKhoApp" ^
     --add-data "Kiemke_template.xlsx;." ^
     --add-data "dist_path_config.py;." ^
     --hidden-import pandas ^
