@@ -1,0 +1,35 @@
+{
+  "scanned_items": {},
+  "tong_hop_data": [
+    {
+      "N/X": "KIEM KE Năm 2025 - BP Online",
+      "Số phiếu": "P-07/12/2025",
+      "Ngày": "07/12/25",
+      "Vị trí mới": "EK012",
+      "ISBN": "6932691648016",
+      "Tựa": "Taiyaki shop",
+      "Tồn thực tế": "12",
+      "Số thùng": "032-on 1",
+      "Tình trạng": "",
+      "Ghi chú": "",
+      "Note thùng": "ooooo",
+      "_is_valid_isbn": true
+    },
+    {
+      "N/X": "KIEM KE Năm 2025 - BP Online",
+      "Số phiếu": "P-07/12/2025",
+      "Ngày": "07/12/25",
+      "Vị trí mới": "EK012",
+      "ISBN": "123123123",
+      "Tựa": "",
+      "Tồn thực tế": "12",
+      "Số thùng": "032-on 1",
+      "Tình trạng": "",
+      "Ghi chú": "okokok",
+      "Note thùng": "ooooo",
+      "_is_valid_isbn": false
+    }
+  ],
+  "current_box_number": null,
+  "timestamp": 1765123213.40334
+}

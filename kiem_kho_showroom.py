@@ -23,7 +23,7 @@ import atexit
 class KiemKhoApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Kiểm Kho - Quét Mã Vạch")
+        self.root.title("Kiểm Kho Showroom - Quét Mã Vạch")
         # Tăng chiều cao để hiển thị đủ tất cả các phần tử
         self.root.geometry("1200x800")
         # Đặt kích thước tối thiểu để đảm bảo ô nhập ISBN luôn hiển thị trên màn hình nhỏ
@@ -46,6 +46,7 @@ class KiemKhoApp:
         self.current_box_number = None
         self.scanned_items = {}  # Lưu các item đã quét: {isbn: {tua, ton_thuc_te, so_thung, ton_trong_thung, ghi_chu}}
         self.edit_entry = None  # Entry widget để chỉnh sửa trực tiếp
+        self.so_thung_original_value = ''  # Lưu giá trị số thùng ban đầu để chặn sửa khi đã có dữ liệu quét
         self.editing_item = None  # Item đang được chỉnh sửa
         self.error_highlights = {}  # Lưu các highlight widgets: {item_id: [entry1, entry2]}
         self.is_processing_edit = False  # Flag để tránh xử lý edit 2 lần
@@ -68,7 +69,7 @@ class KiemKhoApp:
             self._backup_file_path = self._get_backup_file_path_init()
         except Exception:
             # Fallback: sử dụng thư mục hiện tại
-            self._backup_file_path = Path.cwd() / "kiem_kho_backup.json"
+            self._backup_file_path = Path.cwd() / "kiem_kho_showroom_backup.json"
         
         # Load cấu hình từ file (nếu có)
         saved_config = self.load_config()
@@ -96,7 +97,7 @@ class KiemKhoApp:
                         self.auto_save_folder = auto_folder_normalized
                         self.config_folder = config_folder_normalized
                         # Cập nhật config_file để dùng đúng thư mục
-                        self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
+                        self.config_file = Path(self.config_folder) / "kiem_kho_showroom_config.json"
                     else:
                         # Một hoặc nhiều đường dẫn không tồn tại - cần setup lại
                         need_setup = True
@@ -221,7 +222,7 @@ class KiemKhoApp:
         """Lấy đường dẫn file config - đọc từ file pointer hoặc tìm ở nhiều vị trí"""
         # Nếu đã có config_folder do người dùng chọn, dùng nó (ưu tiên cao nhất)
         if self.config_folder:
-            return Path(self.config_folder) / "kiem_kho_config.json"
+            return Path(self.config_folder) / "kiem_kho_showroom_config.json"
         
         # Ưu tiên 1: Đọc từ file pointer (trỏ đến vị trí config thực sự)
         location_file = self.get_config_location_file()
@@ -243,7 +244,7 @@ class KiemKhoApp:
                                             config_folder_path = Path(config['config_folder'])
                                             if config_folder_path.exists():
                                                 self.config_folder = str(config_folder_path.resolve())
-                                                return Path(self.config_folder) / "kiem_kho_config.json"
+                                                return Path(self.config_folder) / "kiem_kho_showroom_config.json"
                                         # Nếu không có config_folder, dùng file này luôn
                                         return config_file_path
                                 except:
@@ -258,19 +259,19 @@ class KiemKhoApp:
             # Chạy từ executable
             exe_dir = Path(sys.executable).parent
             search_locations.extend([
-                exe_dir / "kiem_kho_config.json",
-                exe_dir.parent / "kiem_kho_config.json",
+                exe_dir / "kiem_kho_showroom_config.json",
+                exe_dir.parent / "kiem_kho_showroom_config.json",
             ])
             
             user_home = Path.home()
             search_locations.extend([
-                user_home / "Desktop" / "kiem_kho_config.json",
-                user_home / "Documents" / "kiem_kho_config.json",
-                user_home / "kiem_kho_config.json",
+                user_home / "Desktop" / "kiem_kho_showroom_config.json",
+                user_home / "Documents" / "kiem_kho_showroom_config.json",
+                user_home / "kiem_kho_showroom_config.json",
             ])
         else:
             # Chạy từ source code
-            search_locations.append(Path(__file__).parent / "kiem_kho_config.json")
+            search_locations.append(Path(__file__).parent / "kiem_kho_showroom_config.json")
         
         # Tìm file config ở các vị trí và đọc config_folder từ đó
         for config_file_path in search_locations:
@@ -284,7 +285,7 @@ class KiemKhoApp:
                             if config_folder_path.exists() and config_folder_path.is_dir():
                                 self.config_folder = str(config_folder_path.resolve())
                                 # Trả về đường dẫn file config trong config_folder (vị trí thực sự)
-                                return Path(self.config_folder) / "kiem_kho_config.json"
+                                return Path(self.config_folder) / "kiem_kho_showroom_config.json"
                         # Nếu không có config_folder nhưng có đầy đủ thông tin, dùng file này
                         elif 'template_file_path' in old_config and 'auto_save_folder' in old_config:
                             # File này có thể là file config hợp lệ, nhưng chưa có config_folder
@@ -296,9 +297,9 @@ class KiemKhoApp:
         
         # Nếu không tìm thấy, dùng vị trí mặc định
         if getattr(sys, 'frozen', False):
-            return Path(sys.executable).parent / "kiem_kho_config.json"
+            return Path(sys.executable).parent / "kiem_kho_showroom_config.json"
         else:
-            return Path(__file__).parent / "kiem_kho_config.json"
+            return Path(__file__).parent / "kiem_kho_showroom_config.json"
     
     def load_config(self):
         """Load cấu hình từ file - Windows-safe, tìm ở nhiều vị trí"""
@@ -324,7 +325,7 @@ class KiemKhoApp:
             
             # Ưu tiên 2: File config trong config_folder (nếu đã biết)
             if self.config_folder:
-                search_locations.append(Path(self.config_folder) / "kiem_kho_config.json")
+                search_locations.append(Path(self.config_folder) / "kiem_kho_showroom_config.json")
             
             # Ưu tiên 3: File config hiện tại
             if self.config_file:
@@ -334,18 +335,18 @@ class KiemKhoApp:
             if getattr(sys, 'frozen', False):
                 exe_dir = Path(sys.executable).parent
                 search_locations.extend([
-                    exe_dir / "kiem_kho_config.json",
-                    exe_dir.parent / "kiem_kho_config.json",
+                    exe_dir / "kiem_kho_showroom_config.json",
+                    exe_dir.parent / "kiem_kho_showroom_config.json",
                 ])
                 
                 user_home = Path.home()
                 search_locations.extend([
-                    user_home / "Desktop" / "kiem_kho_config.json",
-                    user_home / "Documents" / "kiem_kho_config.json",
-                    user_home / "kiem_kho_config.json",
+                    user_home / "Desktop" / "kiem_kho_showroom_config.json",
+                    user_home / "Documents" / "kiem_kho_showroom_config.json",
+                    user_home / "kiem_kho_showroom_config.json",
                 ])
             else:
-                search_locations.append(Path(__file__).parent / "kiem_kho_config.json")
+                search_locations.append(Path(__file__).parent / "kiem_kho_showroom_config.json")
             
             # Loại bỏ trùng lặp và chỉ giữ các file tồn tại
             # Windows-safe: Normalize paths để so sánh (case-insensitive trên Windows)
@@ -404,7 +405,7 @@ class KiemKhoApp:
                             # QUAN TRỌNG: Nếu file này có config_folder, đọc file config từ đó (vị trí thực sự)
                             if config_folder:
                                 try:
-                                    actual_config_file = Path(config_folder) / "kiem_kho_config.json"
+                                    actual_config_file = Path(config_folder) / "kiem_kho_showroom_config.json"
                                     # Windows-safe: So sánh đường dẫn case-insensitive
                                     if actual_config_file.exists():
                                         current_path_str = str(config_file_path.resolve())
@@ -442,7 +443,7 @@ class KiemKhoApp:
                             # Cập nhật config_folder và config_file
                             if config_folder:
                                 self.config_folder = config_folder
-                                self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
+                                self.config_file = Path(self.config_folder) / "kiem_kho_showroom_config.json"
                             
                             return {
                                 'template_file_path': template_path,
@@ -487,7 +488,7 @@ class KiemKhoApp:
                 config_folder_normalized = str(Path(config_folder).resolve())
                 self.config_folder = config_folder_normalized
                 # Cập nhật lại config_file path
-                self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
+                self.config_file = Path(self.config_folder) / "kiem_kho_showroom_config.json"
             
             config = {
                 'template_file_path': template_path_normalized,
@@ -560,7 +561,7 @@ class KiemKhoApp:
             return
         
         # Label hướng dẫn
-        label_text = "Cấu hình 3 đường dẫn:\n1. CHỌN ĐƯỜNG DẪN FILE TỔNG HỢP MẶC ĐỊNH (để copy khi SAVE)\n2. CHỌN ĐƯỜNG DẪN FILE THEO DÕI CHI TIẾT (Kiemkecuoinam)\n3. Thư mục lưu file cấu hình (kiem_kho_config.json)"
+        label_text = "Cấu hình 3 đường dẫn:\n1. CHỌN ĐƯỜNG DẪN FILE TỔNG HỢP MẶC ĐỊNH (để copy khi SAVE)\n2. CHỌN ĐƯỜNG DẪN FILE THEO DÕI CHI TIẾT (Kiemkecuoinam)\n3. Thư mục lưu file cấu hình (kiem_kho_showroom_config.json)"
         tk.Label(dialog, text=label_text, bg='#F5F5F5', fg='#000000', 
                 font=('Arial', 11), justify=tk.LEFT, wraplength=650).pack(pady=15, padx=20)
         
@@ -653,7 +654,7 @@ class KiemKhoApp:
         browse2_btn.pack(side=tk.RIGHT)
         
         # Đường dẫn 3: Thư mục lưu file config
-        tk.Label(dialog, text="3. Thư mục lưu file cấu hình (kiem_kho_config.json):", bg='#F5F5F5', fg='#000000', 
+        tk.Label(dialog, text="3. Thư mục lưu file cấu hình (kiem_kho_showroom_config.json):", bg='#F5F5F5', fg='#000000', 
                 font=('Arial', 10, 'bold'), anchor='w').pack(pady=(15, 5), padx=20, fill=tk.X)
         
         input_frame3 = tk.Frame(dialog, bg='#F5F5F5')
@@ -665,7 +666,7 @@ class KiemKhoApp:
         elif self.config_folder:
             path3_var.set(self.config_folder)
         else:
-            # Mặc định: thư mục chứa DuLieuDauVao.xlsx
+            # Mặc định: thư mục chứa DuLieuDauVaoShowroom.xlsx
             default_config_dir = self.get_config_file_path().parent
             path3_var.set(str(default_config_dir))
         
@@ -791,7 +792,7 @@ class KiemKhoApp:
             self.auto_save_folder = folder_path
             self.config_folder = config_folder_path
             # Cập nhật config_file để trỏ đến đúng vị trí
-            self.config_file = Path(self.config_folder) / "kiem_kho_config.json"
+            self.config_file = Path(self.config_folder) / "kiem_kho_showroom_config.json"
             
             # QUAN TRỌNG: Lưu file pointer trỏ đến vị trí config thực sự (đã mã hóa)
             # File này sẽ được lưu ở vị trí cố định (cùng thư mục với exe) để dễ tìm
@@ -954,18 +955,18 @@ class KiemKhoApp:
                 
                 if original_dist_path:
                     # Tìm file từ thư mục dist gốc
-                    excel_path = original_dist_path / "DuLieuDauVao.xlsx"
+                    excel_path = original_dist_path / "DuLieuDauVaoShowroom.xlsx"
                     search_dir = original_dist_path
                 else:
                     # Fallback: Tìm trong thư mục chứa executable
                     exe_dir = Path(sys.executable).parent
-                    excel_path = exe_dir / "DuLieuDauVao.xlsx"
+                    excel_path = exe_dir / "DuLieuDauVaoShowroom.xlsx"
                     search_dir = exe_dir
                 
                 # Nếu không có trong thư mục dist gốc hoặc thư mục exe, thử tìm trong bundle
                 if not excel_path.exists():
                     base_path = Path(sys._MEIPASS)
-                    excel_path = base_path / "DuLieuDauVao.xlsx"
+                    excel_path = base_path / "DuLieuDauVaoShowroom.xlsx"
                 
                 # Danh sách file thay thế nếu file chính không đọc được
                 xls_alternatives = [
@@ -983,7 +984,7 @@ class KiemKhoApp:
                     ])
             else:
                 # Chạy từ source code
-                excel_path = Path(__file__).parent / "DuLieuDauVao.xlsx"
+                excel_path = Path(__file__).parent / "DuLieuDauVaoShowroom.xlsx"
                 # Danh sách file thay thế nếu file chính không đọc được
                 xls_alternatives = [
                     Path(__file__).parent / "KIEM KE Năm -2025 - BP ONLINE.xls",
@@ -1205,11 +1206,7 @@ class KiemKhoApp:
             col_str = str(col).strip()
             col_lower = col_str.lower()
             
-            # Số thùng / Thùng
-            if ('số thùng' in col_lower or 'so thung' in col_lower or 
-                col_lower == 'thùng' or col_lower == 'thung'):
-                if 'so_thung' not in col_mapping:
-                    col_mapping['so_thung'] = col
+            # Bỏ logic tìm cột số thùng - Showroom không cần số thùng trong Excel
             
             # ISBN
             if 'isbn' in col_lower:
@@ -1235,10 +1232,11 @@ class KiemKhoApp:
                 # Chỉ dùng Qty nếu chưa tìm thấy cột nào khác
                 col_mapping['ton_tung_tua'] = col
         
-        # Kiểm tra xem có đủ cột không
-        if len(col_mapping) < 4:
+        # Kiểm tra xem có đủ cột không (chỉ cần 3 cột: isbn, tựa, tồn tựa)
+        if len(col_mapping) < 3:
             messagebox.showwarning("Cảnh báo", 
-                f"Không tìm thấy đủ các cột cần thiết. Tìm thấy: {list(col_mapping.keys())}\n"
+                f"Không tìm thấy đủ các cột cần thiết. Cần: isbn, tựa, tồn tựa\n"
+                f"Tìm thấy: {list(col_mapping.keys())}\n"
                 f"Các cột trong file: {list(self.df.columns)}")
         
         # Đổi tên cột để dễ sử dụng
@@ -1303,11 +1301,18 @@ class KiemKhoApp:
         self.so_thung_var = tk.StringVar()
         self.so_thung_entry = tk.Entry(info_frame, textvariable=self.so_thung_var, width=40, bg=input_bg_yellow,
                                        fg=input_fg, font=('Arial', 11), relief=tk.SOLID, bd=1, insertbackground='#000000')
-        self.so_thung_entry.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
-        self.so_thung_entry.bind('<Return>', lambda e: self.load_box_data())
-        load_btn = tk.Button(info_frame, text="Load", command=self.load_box_data, bg=button_bg, 
-                            fg='#1976D2', font=('Arial', 10, 'bold'), width=10, relief=tk.RAISED, bd=1)
-        load_btn.grid(row=1, column=2, padx=5, pady=5)
+        self.so_thung_entry.grid(row=1, column=1, columnspan=2, padx=5, pady=5, sticky='ew')
+        # Bỏ nút Load và logic load_box_data - Showroom không cần load theo số thùng
+        # BỎ event handler để tránh reset "Đã quét" khi nhập số thùng mới
+        # Chỉ cập nhật current_box_number khi quét ISBN, không cập nhật "Đã quét" khi nhập số thùng
+        # self.so_thung_entry.bind('<FocusOut>', lambda e: self.on_so_thung_changed())
+        # self.so_thung_entry.bind('<Return>', lambda e: self.on_so_thung_changed())
+        
+        # Lưu giá trị số thùng ban đầu để kiểm tra khi người dùng cố gắng sửa
+        self.so_thung_original_value = ''
+        
+        # Thêm event handler để chặn việc sửa số thùng khi đã có dữ liệu quét
+        self.so_thung_entry.bind('<FocusIn>', self.on_so_thung_focus_in)
         
         # Ngày (*)
         tk.Label(info_frame, text="Ngày (*):", bg=bg_color, fg=label_required_fg, font=('Arial', 11, 'bold')).grid(row=2, column=0, sticky='w', padx=5, pady=5)
@@ -1345,18 +1350,14 @@ class KiemKhoApp:
         
         info_frame.columnconfigure(1, weight=1)
         
-        # === PHẦN HIỂN THỊ SỐ TỰA ===
+        # === PHẦN HIỂN THỊ ĐÃ QUÉT ===
         count_frame = tk.Frame(main_frame, bg=bg_color)
         count_frame.grid(row=1, column=0, sticky='ew', pady=(0, 5))
         
-        tk.Label(count_frame, text="Số tựa:", bg=bg_color, fg=label_required_fg, font=('Arial', 11, 'bold')).grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        self.so_tua_var = tk.StringVar(value="0")
-        tk.Label(count_frame, textvariable=self.so_tua_var, bg=bg_color, fg='#1976D2', font=('Arial', 14, 'bold')).grid(row=0, column=1, padx=5, pady=5, sticky='w')
-        
-        # Hiển thị số tựa đã quét
-        tk.Label(count_frame, text="Đã quét:", bg=bg_color, fg=label_required_fg, font=('Arial', 11, 'bold')).grid(row=0, column=2, padx=(20, 5), pady=5, sticky='w')
+        # Hiển thị số dòng đã quét trong table
+        tk.Label(count_frame, text="Đã quét:", bg=bg_color, fg=label_required_fg, font=('Arial', 11, 'bold')).grid(row=0, column=0, padx=5, pady=5, sticky='w')
         self.so_tua_da_quet_var = tk.StringVar(value="0")
-        tk.Label(count_frame, textvariable=self.so_tua_da_quet_var, bg=bg_color, fg='#4CAF50', font=('Arial', 14, 'bold')).grid(row=0, column=3, padx=5, pady=5, sticky='w')
+        tk.Label(count_frame, textvariable=self.so_tua_da_quet_var, bg=bg_color, fg='#4CAF50', font=('Arial', 14, 'bold')).grid(row=0, column=1, padx=5, pady=5, sticky='w')
         
         # === PHẦN NHẬP ISBN (QUÉT MÃ VẠCH) - Đặt ở dưới cùng với grid ===
         scan_frame = tk.Frame(main_frame, bg=bg_color)
@@ -1386,7 +1387,7 @@ class KiemKhoApp:
         scrollbar_y = tk.Scrollbar(table_frame, orient=tk.VERTICAL, bg='#E0E0E0', troughcolor=bg_color)
         scrollbar_x = tk.Scrollbar(table_frame, orient=tk.HORIZONTAL, bg='#E0E0E0', troughcolor=bg_color)
         
-        # Định nghĩa thứ tự cột cố định
+        # Định nghĩa thứ tự cột cố định - Showroom có cột "Tình trạng" nhưng để trống
         columns = ('Số thứ tự', 'ISBN', 'Tựa', 'Tồn thực tế', 'Số thùng', 'Tồn tựa trong thùng', 'Tình trạng', 'Ghi chú', 'Xóa')
         # Thứ tự: 0=Số thứ tự, 1=ISBN, 2=Tựa, 3=Tồn thực tế, 4=Số thùng, 5=Tồn tựa trong thùng, 6=Tình trạng, 7=Ghi chú, 8=Xóa
         
@@ -1404,14 +1405,12 @@ class KiemKhoApp:
                                  yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set,
                                  height=10, style='Treeview')
         
-        # Scrollbar với callback để cập nhật highlights
+        # Scrollbar - bỏ logic highlight
         def yview_scroll(*args):
             self.tree.yview(*args)
-            self.update_all_highlights()
         
         def xview_scroll(*args):
             self.tree.xview(*args)
-            self.update_all_highlights()
         
         scrollbar_y.config(command=yview_scroll)
         scrollbar_x.config(command=xview_scroll)
@@ -1452,16 +1451,7 @@ class KiemKhoApp:
         # Double click cũng mở edit (để dễ sử dụng hơn)
         self.tree.bind('<Double-1>', self.on_item_click)
         
-        # Bind events để cập nhật highlight khi scroll hoặc resize
-        self.tree.bind('<Configure>', lambda e: self.update_all_highlights())
-        
-        # Bind khi window resize
-        self.root.bind('<Configure>', lambda e: self.update_all_highlights())
-        
-        # Bind khi mouse wheel scroll
-        self.tree.bind('<MouseWheel>', lambda e: self.update_all_highlights())
-        self.tree.bind('<Button-4>', lambda e: self.update_all_highlights())
-        self.tree.bind('<Button-5>', lambda e: self.update_all_highlights())
+        # Showroom: Bỏ logic highlight - không cần bind events
         
         # === TAB 2: TỔNG HỢP ===
         tab_tonghop = tk.Frame(self.notebook, bg=bg_color)
@@ -1638,80 +1628,31 @@ class KiemKhoApp:
                     # Reset dữ liệu
                     self.scanned_items = {}
                     self.clear_table()
-                    self.so_tua_var.set("0")
+                    # Xóa phần đếm Số tựa - không còn sử dụng
                     # Tiếp tục load thùng mới
                 else:  # Người dùng chọn "Hủy" - Không làm gì
                     return
         
-        try:
-            # Tìm cột số thùng (có thể là 'so_thung' sau khi mapping hoặc tên gốc)
-            so_thung_col = None
-            for col in self.df.columns:
-                col_lower = str(col).lower().strip()
-                if 'số thùng' in col_lower or 'so thung' in col_lower or col_lower == 'thùng' or col_lower == 'so_thung':
-                    so_thung_col = col
-                    break
-            
-            if so_thung_col is None:
-                messagebox.showerror("Lỗi", f"Không tìm thấy cột 'Số thùng' trong file Excel!\nCác cột có sẵn: {list(self.df.columns)}")
-                return
-            
-            # Chuyển đổi sang string để so sánh (không phân biệt chữ hoa/thường)
-            self.df[so_thung_col] = self.df[so_thung_col].astype(str).str.strip()
-            # So sánh không phân biệt chữ hoa/thường
-            so_thung_lower = so_thung.lower()
-            self.current_box_data = self.df[self.df[so_thung_col].str.lower() == so_thung_lower].copy()
-            
-            if self.current_box_data.empty:
-                messagebox.showinfo("Thông báo", f"Không tìm thấy dữ liệu cho thùng số {so_thung}")
-                self.current_box_number = None
-                self.so_tua_var.set("0")
-                self.clear_table()
-                return
-            
-            # Kiểm tra nếu đã quét đủ số tựa trong thùng này
-            so_tua_trong_thung = len(self.current_box_data)
-            so_tua_da_quet = len(self.scanned_items)
-            
-            # Nếu đang load lại cùng một thùng và đã quét đủ (so sánh không phân biệt chữ hoa/thường)
-            current_box_lower = str(self.current_box_number).lower() if self.current_box_number else ''
-            if current_box_lower == so_thung.lower() and so_tua_da_quet >= so_tua_trong_thung:
-                messagebox.showwarning(
-                    "Cảnh báo", 
-                    f"Thùng {so_thung} đã được kiểm kê đủ {so_tua_trong_thung} tựa!\n\n"
-                    f"Bạn đã quét {so_tua_da_quet} tựa.\n\n"
-                    "Vui lòng load thùng khác hoặc lưu dữ liệu trước khi tiếp tục."
-                )
-                return
-            
-            self.current_box_number = so_thung
-            self.scanned_items = {}  # Reset danh sách đã quét
-            
-            # Đếm số tựa đã quét từ tab Tổng hợp cho thùng này
-            so_tua_da_quet = self.count_scanned_titles_for_box(so_thung)
-            
-            # Hiển thị số tựa tổng và số tựa đã quét
-            self.so_tua_var.set(str(len(self.current_box_data)))
-            if hasattr(self, 'so_tua_da_quet_var') and self.so_tua_da_quet_var:
-                self.so_tua_da_quet_var.set(str(so_tua_da_quet))
-            
-            # Clear bảng
-            self.clear_table()
-            
-            # Thông báo thành công với thông tin số tựa đã quét
-            if so_tua_da_quet > 0:
-                messagebox.showinfo("Thành công", 
-                    f"Đã load {len(self.current_box_data)} tựa cho thùng số {so_thung}\n\n"
-                    f"Đã quét: {so_tua_da_quet} tựa (đã lưu trong Tổng hợp)\n"
-                    f"Còn lại: {len(self.current_box_data) - so_tua_da_quet} tựa")
-            else:
-                messagebox.showinfo("Thành công", f"Đã load {len(self.current_box_data)} tựa cho thùng số {so_thung}")
-            
-            # Focus vào ô nhập ISBN để sẵn sàng quét
+        # Showroom: Chỉ lưu số thùng người dùng nhập, không cần load từ Excel
+        self.current_box_number = so_thung
+        
+        # Showroom: Set current_box_data = self.df (toàn bộ dữ liệu Excel)
+        if self.df is not None and not self.df.empty:
+            self.current_box_data = self.df.copy()
+            # Hiển thị số tựa tổng từ Excel
+            # Xóa phần đếm Số tựa - không còn sử dụng
+        else:
+            self.current_box_data = None
+            self.so_tua_var.set("0")
+            messagebox.showwarning("Cảnh báo", "Chưa load dữ liệu Excel. Vui lòng đảm bảo file DuLieuDauVaoShowroom.xlsx có trong thư mục.")
+            return
+        
+        # Cập nhật "Đã quét" sau khi load: số dòng trong Tổng hợp + số dòng trong Kiểm kê
+        self.update_da_quet_counter()
+        
+        # Focus vào ô nhập ISBN để sẵn sàng quét
+        if hasattr(self, 'isbn_entry'):
             self.isbn_entry.focus()
-            
-        except Exception as e:
-            messagebox.showerror("Lỗi", f"Không thể load dữ liệu thùng: {str(e)}")
     
     def count_valid_scanned_isbns(self):
         """Đếm số ISBN hợp lệ (tồn tại trong Excel) đã được quét - không đếm ISBN không tồn tại"""
@@ -1758,6 +1699,66 @@ class KiemKhoApp:
                     count += 1
         
         return count
+    
+    def count_all_rows_for_box_in_tong_hop(self, so_thung):
+        """Đếm TẤT CẢ số dòng đã lưu trong Tổng hợp cho một thùng cụ thể (bao gồm cả ISBN không tồn tại)"""
+        if not so_thung or not self.tong_hop_data:
+            return 0
+        
+        so_thung_clean = str(so_thung).strip()
+        count = 0
+        
+        for data in self.tong_hop_data:
+            # So sánh số thùng (có thể là 'Số thùng' hoặc 'Vị trí mới') - không phân biệt chữ hoa/thường
+            so_thung_in_data = str(data.get('Số thùng', '')).strip()
+            vi_tri_moi_in_data = str(data.get('Vị trí mới', '')).strip()
+            
+            # Kiểm tra nếu số thùng khớp (so sánh không phân biệt chữ hoa/thường)
+            if (so_thung_in_data.lower() == so_thung_clean.lower() or 
+                vi_tri_moi_in_data.lower() == so_thung_clean.lower()):
+                # Đếm TẤT CẢ các dòng, không phân biệt ISBN hợp lệ hay không
+                count += 1
+        
+        return count
+    
+    def update_da_quet_counter(self):
+        """Cập nhật số "Đã quét": chỉ đếm số dòng hiện tại trong bảng Kiểm kê"""
+        if not hasattr(self, 'so_tua_da_quet_var') or not self.so_tua_da_quet_var:
+            return
+        
+        # Đếm số dòng hiện tại trong table Kiểm kê
+        so_dong_trong_kiem_ke = len(self.tree.get_children()) if hasattr(self, 'tree') else 0
+        
+        # Chỉ hiển thị số dòng đang quét trong Kiểm kê
+        self.so_tua_da_quet_var.set(str(so_dong_trong_kiem_ke))
+    
+    def on_so_thung_changed(self, event=None):
+        """Xử lý khi Số thùng thay đổi - cập nhật lại "Đã quét" để đếm lại số dòng trong Tổng hợp cho số thùng mới"""
+        # Chỉ cập nhật nếu UI đã được khởi tạo hoàn chỉnh
+        if hasattr(self, 'so_tua_da_quet_var') and self.so_tua_da_quet_var:
+            # Cập nhật current_box_number để đồng bộ với giá trị mới
+            so_thung_moi = self.so_thung_var.get().strip() if hasattr(self, 'so_thung_var') and self.so_thung_var else ''
+            if so_thung_moi:
+                self.current_box_number = so_thung_moi
+            # Cập nhật lại "Đã quét"
+            self.update_da_quet_counter()
+    
+    def on_so_thung_focus_in(self, event=None):
+        """Xử lý khi focus vào input số thùng - kiểm tra nếu đã có dữ liệu quét thì chặn sửa"""
+        if self.scanned_items and len(self.scanned_items) > 0:
+            # Đã có dữ liệu quét, không cho phép sửa
+            # Đảm bảo input ở chế độ readonly với màu nền đẹp hơn (xanh nhạt, không phải đen)
+            if hasattr(self, 'so_thung_entry'):
+                self.so_thung_entry.config(state='readonly', bg='#E8F4F8', fg='#1565C0', relief=tk.SOLID, bd=1)
+            # Hiển thị cảnh báo
+            messagebox.showwarning(
+                "Cảnh báo", 
+                "Không thể sửa số thùng khi đã có dữ liệu đã quét!\n\n"
+                "Vui lòng SAVE hoặc RESET trước khi nhập số thùng mới."
+            )
+            # Focus ra khỏi input số thùng, chuyển sang input ISBN
+            if hasattr(self, 'isbn_entry'):
+                self.isbn_entry.focus()
     
     def is_isbn_in_input_data(self, isbn):
         """Kiểm tra xem ISBN có tồn tại trong dữ liệu đầu vào (tong_hop_data) không - không kiểm tra số thùng"""
@@ -1841,40 +1842,58 @@ class KiemKhoApp:
             if not isbn:
                 return
             
-            if self.current_box_data is None or self.current_box_data.empty:
+            # Showroom: Kiểm tra dữ liệu Excel đã load chưa
+            if self.df is None or self.df.empty:
                 # Sử dụng after để không block UI
-                self.root.after(10, lambda: messagebox.showwarning("Cảnh báo", "Vui lòng nhập số thùng và load dữ liệu trước!"))
+                self.root.after(10, lambda: messagebox.showwarning("Cảnh báo", "Vui lòng đảm bảo file Excel đã được load!"))
                 self.isbn_entry.delete(0, tk.END)
                 return
             
-            # Lưu số tựa trong thùng để dùng sau
-            so_tua_trong_thung = len(self.current_box_data)
+            # Showroom: Kiểm tra số thùng đã nhập chưa
+            so_thung_input = self.so_thung_var.get().strip() if hasattr(self, 'so_thung_var') and self.so_thung_var else ''
+            if not so_thung_input:
+                self.root.after(10, lambda: messagebox.showwarning("Cảnh báo", "Vui lòng nhập số thùng trước khi quét ISBN!"))
+                self.isbn_entry.delete(0, tk.END)
+                return
             
-            # Tìm tựa trong dữ liệu thùng hiện tại - tối ưu với vectorization
-            # (Kiểm tra is_over_limit sẽ được thực hiện sau khi xác định ISBN có hợp lệ không)
-            if 'isbn' in self.current_box_data.columns:
+            # QUAN TRỌNG: Cập nhật current_box_number từ so_thung_var để đồng bộ
+            # Đảm bảo khi quét ISBN, current_box_number luôn đúng với giá trị người dùng nhập
+            self.current_box_number = so_thung_input
+            
+            # Lưu giá trị số thùng ban đầu khi quét ISBN đầu tiên (nếu chưa có dữ liệu)
+            if not self.scanned_items:
+                self.so_thung_original_value = so_thung_input
+                # Disable input số thùng khi đã bắt đầu quét (không cho phép sửa)
+                # Set màu nền đẹp hơn khi readonly (xanh nhạt, không phải đen)
+                if hasattr(self, 'so_thung_entry'):
+                    self.so_thung_entry.config(state='readonly', bg='#E8F4F8', fg='#1565C0', relief=tk.SOLID, bd=1)
+            
+            # Showroom: Tìm ISBN trong toàn bộ self.df (không cần tìm theo số thùng)
+            # Tìm tựa trong toàn bộ dữ liệu Excel - tối ưu với vectorization
+            if 'isbn' in self.df.columns:
                 isbn_clean = str(isbn).strip()
                 isbn_clean_digits = ''.join(filter(str.isdigit, isbn_clean))
                 matched_row = None
                 
+                # Showroom: Tìm trong toàn bộ self.df (không cần tìm theo số thùng)
                 # Tối ưu: sử dụng vectorization thay vì iterrows() (nhanh hơn nhiều)
                 try:
                     # Chuyển đổi ISBN sang số để so sánh nhanh hơn
-                    isbn_col = self.current_box_data['isbn'].astype(str).str.strip()
+                    isbn_col = self.df['isbn'].astype(str).str.strip()
                     
                     # Tìm khớp chính xác trước (nhanh nhất)
                     exact_match = isbn_col == isbn_clean
                     if exact_match.any():
-                        matched_row = self.current_box_data[exact_match].iloc[0]
+                        matched_row = self.df[exact_match].iloc[0]
                     else:
                         # Tìm khớp với digits
                         isbn_col_digits = isbn_col.str.replace(r'\D', '', regex=True)
                         digit_match = isbn_col_digits == isbn_clean_digits
                         if digit_match.any():
-                            matched_row = self.current_box_data[digit_match].iloc[0]
+                            matched_row = self.df[digit_match].iloc[0]
                         else:
                             # Tìm khớp với endswith/startswith (chậm hơn nhưng cần thiết)
-                            for idx, row in self.current_box_data.iterrows():
+                            for idx, row in self.df.iterrows():
                                 row_isbn = str(row.get('isbn', '')).strip()
                                 row_isbn_clean = ''.join(filter(str.isdigit, row_isbn))
                                 
@@ -1887,7 +1906,7 @@ class KiemKhoApp:
                 except Exception as e:
                     # Fallback về cách cũ nếu vectorization lỗi
                     print(f"Lỗi khi tìm ISBN với vectorization: {str(e)}")
-                    for idx, row in self.current_box_data.iterrows():
+                    for idx, row in self.df.iterrows():
                         row_isbn = str(row.get('isbn', '')).strip()
                         row_isbn_clean = ''.join(filter(str.isdigit, row_isbn))
                         
@@ -1898,27 +1917,11 @@ class KiemKhoApp:
                             matched_row = row
                             break
                 
-                # Kiểm tra xem ISBN này đã được quét và lưu trong tab Tổng hợp chưa
-                if matched_row is not None:
-                    if self.is_isbn_already_scanned(isbn_clean, self.current_box_number):
-                        # Fix closure issue: capture giá trị vào biến local
-                        isbn_msg = isbn_clean
-                        box_msg = self.current_box_number
-                        self.root.after(10, lambda i=isbn_msg, b=box_msg: messagebox.showwarning(
-                            "Cảnh báo",
-                            f"ISBN {i} đã được quét và lưu trong tab Tổng hợp cho thùng {b}!\n\n"
-                            "Vui lòng không quét lại ISBN đã được lưu."
-                        ))
-                        self.isbn_entry.delete(0, tk.END)
-                        return
-                
-                # Kiểm tra xem ISBN có thuộc thùng này không
-                # Nếu không tìm thấy trong thùng hiện tại, coi như ISBN không tồn tại (không lấy dữ liệu từ thùng khác)
+                # Showroom: Nếu không tìm thấy ISBN, coi như ISBN không tồn tại
+                # BỎ logic kiểm tra ISBN đã quét trong Tổng hợp - cho phép quét lại và cộng dồn
                 is_invalid_isbn = False
                 
                 if matched_row is None:
-                    # Nếu không tìm thấy trong thùng hiện tại, coi như ISBN không tồn tại
-                    # Không tìm kiếm trong các thùng khác
                     is_invalid_isbn = True
                 
                 # Đảm bảo pandas đã được import
@@ -2001,9 +2004,10 @@ class KiemKhoApp:
                     tinh_trang_value = ''
                     is_existing_item = False
                 
-                # Xử lý item đã tồn tại: nếu ISBN đã được quét và ISBN tồn tại trong thùng, cho phép tăng số lượng
+                # Xử lý item đã tồn tại: nếu ISBN đã được quét (cả ISBN hợp lệ và không tồn tại), cho phép tăng số lượng
                 # (không cần kiểm tra is_over_limit vì đây là quét lại để tăng số lượng)
-                if is_already_scanned and matched_row is not None:
+                old_stt = None  # Lưu STT cũ khi cộng dồn
+                if is_already_scanned:
                     # ISBN đã tồn tại - tăng số lượng lên 1
                     is_existing_item = True
                     item_id_old = self.scanned_items[isbn_clean]['item_id']
@@ -2012,6 +2016,9 @@ class KiemKhoApp:
                     old_ton_thuc_te_from_items = self.scanned_items[isbn_clean].get('ton_thuc_te', '')
                     old_values = list(self.tree.item(item_id_old, 'values'))
                     old_ton_thuc_te_from_tree = old_values[3] if len(old_values) > 3 else ''  # Tồn thực tế ở index 3
+                    
+                    # Giữ lại STT cũ để dùng lại khi thêm lại dòng
+                    old_stt = old_values[0] if len(old_values) > 0 else None
                     
                     # Chuyển đổi sang string và strip để so sánh
                     # QUAN TRỌNG: Kiểm tra cả None và empty string, nhưng không bỏ qua giá trị '0'
@@ -2056,9 +2063,9 @@ class KiemKhoApp:
                         # Nếu không parse được, mặc định là 1
                         ton_thuc_te_value = '1'
                     
-                    # Giữ lại giá trị Ghi chú và Tình trạng cũ
-                    ghi_chu_value = old_values[7] if len(old_values) > 7 else ''  # Ghi chú ở index 7
+                    # Showroom: Giữ lại giá trị Ghi chú và Tình trạng cũ
                     tinh_trang_value = old_values[6] if len(old_values) > 6 else ''  # Tình trạng ở index 6
+                    ghi_chu_value = old_values[7] if len(old_values) > 7 else ''  # Ghi chú ở index 7
                     
                     # Xóa highlight cũ trước khi xóa item để tránh lỗi khi click vào highlight
                     try:
@@ -2072,12 +2079,25 @@ class KiemKhoApp:
                     except:
                         pass  # Item có thể đã bị xóa rồi
                     del self.scanned_items[isbn_clean]
+                    
+                    # Nếu là ISBN không tồn tại, tự động cập nhật "Tồn tựa trong thùng" bằng với "Tồn thực tế" mới
+                    if should_treat_as_invalid:
+                        try:
+                            ton_thuc_te_num = int(float(ton_thuc_te_value)) if ton_thuc_te_value else 0
+                            if ton_thuc_te_num > 0:
+                                ton_trong_thung = ton_thuc_te_num
+                        except (ValueError, TypeError):
+                            pass
                 
                 # Thêm vào bảng với đầy đủ thông tin
                 # Chuyển ton_trong_thung thành số nguyên để hiển thị
-                # Nếu ISBN không hợp lệ, để trống thay vì hiển thị 0
+                # Nếu ISBN không hợp lệ, để trống thay vì hiển thị 0 (trừ khi đã được cộng dồn)
                 if should_treat_as_invalid:
-                    ton_trong_thung_display = ''
+                    # Nếu đã được cộng dồn (is_existing_item = True), hiển thị giá trị đã cập nhật
+                    if is_existing_item and ton_trong_thung > 0:
+                        ton_trong_thung_display = ton_trong_thung
+                    else:
+                        ton_trong_thung_display = ''
                 else:
                     ton_trong_thung_display = int(ton_trong_thung) if ton_trong_thung else 0
                 
@@ -2110,9 +2130,15 @@ class KiemKhoApp:
                         so_thung_hien_thi = so_thung
                 # Nếu ISBN không hợp lệ, so_thung_hien_thi đã được set thành '' ở trên
                 
-                # Đảm bảo thứ tự đúng với columns: Số thứ tự, ISBN, Tựa, Tồn thực tế, Số thùng, Tồn tựa trong thùng, Tình trạng, Ghi chú
-                # Tính số thứ tự: số dòng hiện tại + 1
-                so_thu_tu = len(self.tree.get_children()) + 1
+                # Showroom: Đảm bảo thứ tự đúng với columns: Số thứ tự, ISBN, Tựa, Tồn thực tế, Số thùng, Tồn tựa trong thùng, Ghi chú, Xóa
+                # Tính số thứ tự: nếu là cộng dồn (đã có STT cũ), giữ nguyên STT cũ, nếu không thì tính mới
+                if old_stt is not None:
+                    try:
+                        so_thu_tu = int(old_stt)  # Giữ nguyên STT cũ khi cộng dồn (chuyển sang int để so sánh)
+                    except (ValueError, TypeError):
+                        so_thu_tu = len(self.tree.get_children()) + 1
+                else:
+                    so_thu_tu = len(self.tree.get_children()) + 1  # Tính STT mới cho item mới
                 
                 # Đảm bảo ton_thuc_te_value là string
                 # Nếu ISBN không hợp lệ, giữ nguyên giá trị rỗng
@@ -2132,15 +2158,18 @@ class KiemKhoApp:
                 if not isbn_display:
                     isbn_display = str(isbn).strip() if isbn else ''
                 
+                # Showroom: Lấy số thùng từ input "Số thùng"
+                so_thung_hien_thi = str(self.so_thung_var.get().strip()) if self.so_thung_var.get().strip() else ''
+                
                 item_id = self.tree.insert('', tk.END, values=(
                     str(so_thu_tu),            # 0: Số thứ tự
                     isbn_display,               # 1: ISBN - đảm bảo hiển thị đúng
                     str(tua) if tua else '',   # 2: Tựa
                     ton_thuc_te_value,         # 3: Tồn thực tế - tự động điền 1 hoặc tăng lên (hoặc rỗng cho ISBN không hợp lệ)
-                    str(so_thung_hien_thi) if so_thung_hien_thi else '',    # 4: Số thùng (dùng vị trí mới nếu có, hoặc rỗng cho ISBN không hợp lệ)
+                    so_thung_hien_thi,         # 4: Số thùng (lấy từ input "Số thùng")
                     str(ton_trong_thung_display) if ton_trong_thung_display != '' else '',  # 5: Tồn tựa trong thùng (rỗng cho ISBN không hợp lệ)
-                    tinh_trang_value if tinh_trang_value else '',          # 6: Tình trạng - giữ lại nếu đã có (hoặc rỗng cho ISBN không hợp lệ)
-                    ghi_chu_value if ghi_chu_value else '',              # 7: Ghi chú - giữ lại nếu đã có (hoặc rỗng cho ISBN không hợp lệ)
+                    '',                         # 6: Tình trạng - để trống
+                    ghi_chu_value if ghi_chu_value else '',              # 7: Ghi chú - để trống, người dùng tự nhập
                     'Xóa'                       # 8: Xóa - nút xóa dòng
                 ), tags=('',))
                 
@@ -2168,6 +2197,15 @@ class KiemKhoApp:
                 else:
                     so_thung_goc = so_thung if 'so_thung' in locals() else self.current_box_number
                 
+                # Nếu là ISBN không tồn tại và đã được cộng dồn, cập nhật ton_trong_thung bằng với ton_thuc_te
+                if should_treat_as_invalid and is_existing_item:
+                    try:
+                        ton_thuc_te_num = int(float(ton_thuc_te_value)) if ton_thuc_te_value else 0
+                        if ton_thuc_te_num > 0:
+                            ton_trong_thung = ton_thuc_te_num
+                    except (ValueError, TypeError):
+                        pass
+                
                 self.scanned_items[isbn_clean] = {
                     'item_id': item_id,
                     'tua': tua,
@@ -2175,17 +2213,59 @@ class KiemKhoApp:
                     'so_thung': so_thung_hien_thi,  # Lưu số thùng hiển thị (có thể là vị trí mới, hoặc rỗng cho ISBN không hợp lệ)
                     'so_thung_goc': so_thung_goc,  # Lưu số thùng gốc từ dữ liệu (hoặc rỗng cho ISBN không hợp lệ)
                     'vi_tri_moi': vi_tri_moi_value,  # Lưu giá trị từ ô "Thùng / vị trí mới" khi quét
-                    'ton_trong_thung': ton_trong_thung,  # Có thể là 0 hoặc giá trị thực tế
+                    'ton_trong_thung': ton_trong_thung,  # Có thể là 0 hoặc giá trị thực tế (hoặc bằng ton_thuc_te cho ISBN không tồn tại đã cộng dồn)
                     'tinh_trang': tinh_trang_value,  # Giữ lại tình trạng cũ nếu có (hoặc rỗng cho ISBN không hợp lệ)
                     'ghi_chu': ghi_chu_value,  # Giữ lại ghi chú cũ nếu có (hoặc rỗng cho ISBN không hợp lệ)
                     'is_invalid_isbn': should_treat_as_invalid,  # Đánh dấu ISBN không hợp lệ để cho phép edit cột Tựa
                     'is_new_isbn_not_in_data': isbn_not_in_input_data  # Đánh dấu ISBN không tồn tại trong cả thùng và dữ liệu đầu vào
                 }
                 
-                # Cập nhật số tựa đã quét (chỉ hiển thị số tựa đã lưu trong Tổng hợp)
-                if hasattr(self, 'so_tua_da_quet_var') and self.so_tua_da_quet_var and self.current_box_number:
-                    so_tua_da_quet = self.count_scanned_titles_for_box(self.current_box_number)
-                    self.so_tua_da_quet_var.set(str(so_tua_da_quet))
+                # Tính lại STT cho tất cả các dòng để đảm bảo chính xác (đặc biệt khi cộng dồn)
+                # Sắp xếp lại các dòng theo STT hiện tại, sau đó đánh số lại từ 1
+                children = list(self.tree.get_children())
+                
+                # Lấy tất cả các dòng với STT của chúng
+                items_with_stt = []
+                for child in children:
+                    child_values = list(self.tree.item(child, 'values'))
+                    if len(child_values) >= 1:
+                        try:
+                            stt = int(child_values[0]) if child_values[0] else 9999
+                        except (ValueError, TypeError):
+                            stt = 9999
+                        items_with_stt.append((stt, child, child_values))
+                
+                # Sắp xếp theo STT
+                items_with_stt.sort(key=lambda x: x[0])
+                
+                # Đánh số lại STT từ 1 và cập nhật lại tree
+                # Xóa tất cả và insert lại theo thứ tự đúng
+                all_items_data = []
+                for _, child, child_values in items_with_stt:
+                    # Lưu lại tất cả thông tin cần thiết
+                    isbn_val = child_values[1] if len(child_values) > 1 else ''
+                    all_items_data.append((child_values, isbn_val, child))
+                
+                # Xóa tất cả items cũ
+                for child in children:
+                    self.tree.delete(child)
+                
+                # Insert lại theo thứ tự đúng với STT mới
+                for idx, (child_values, isbn_val, old_child_id) in enumerate(all_items_data, start=1):
+                    # Cập nhật STT mới
+                    if len(child_values) >= 9:
+                        child_values[0] = str(idx)
+                    # Insert lại vào tree
+                    new_item_id = self.tree.insert('', tk.END, values=child_values, tags=('',))
+                    # Cập nhật item_id trong scanned_items nếu có
+                    if isbn_val and isbn_val in self.scanned_items:
+                        self.scanned_items[isbn_val]['item_id'] = new_item_id
+                        # Nếu là dòng vừa cộng dồn, cập nhật item_id mới
+                        if isbn_clean == isbn_val:
+                            item_id = new_item_id
+                
+                # Cập nhật số dòng đã quét: số dòng trong Tổng hợp + số dòng hiện tại trong Kiểm kê
+                self.update_da_quet_counter()
                 
                 # Scroll đến item để người dùng thấy được item vừa thêm/cập nhật
                 self.tree.selection_set(item_id)
@@ -2213,10 +2293,7 @@ class KiemKhoApp:
                             # Force update để hiển thị ngay
                             self.root.update_idletasks()
                     
-                    # Tự động kiểm tra và cập nhật highlight/tình trạng nếu có lệch
-                    if isbn_clean in self.scanned_items:
-                        # Sau đó mới kiểm tra và cập nhật highlight/tình trạng
-                        self.root.after(200, lambda i=item_id, isbn=isbn_clean: self._check_and_update_status_after_increment(i, isbn))
+                    # Showroom: Bỏ logic kiểm tra chênh lệch và highlight
                 
             else:
                 self.root.after(10, lambda: messagebox.showerror("Lỗi", "Không tìm thấy cột 'ISBN' trong dữ liệu!"))
@@ -2235,10 +2312,10 @@ class KiemKhoApp:
         self.isbn_entry.focus()
     
     def ensure_values_format(self, values):
-        """Đảm bảo values có đủ 9 cột và cột cuối cùng là 'Xóa'"""
+        """Đảm bảo values có đủ 9 cột và cột cuối cùng là 'Xóa' - Showroom có cột Tình trạng để trống"""
         # Chuyển sang list nếu chưa phải
         values = list(values) if values else []
-        # Đảm bảo có đủ 9 cột
+        # Đảm bảo có đủ 9 cột (có cột Tình trạng ở index 6)
         while len(values) < 9:
             values.append('')
         # Đảm bảo cột cuối cùng (index 8) là 'Xóa'
@@ -2284,10 +2361,8 @@ class KiemKhoApp:
                     child_values[0] = str(idx)  # Cập nhật STT
                     self.tree.item(child, values=child_values)
             
-            # Cập nhật số tựa đã quét (nếu có)
-            if hasattr(self, 'so_tua_da_quet_var') and self.so_tua_da_quet_var and self.current_box_number:
-                so_tua_da_quet = self.count_scanned_titles_for_box(self.current_box_number)
-                self.so_tua_da_quet_var.set(str(so_tua_da_quet))
+            # Cập nhật số dòng đã quét: số dòng trong Tổng hợp + số dòng hiện tại trong Kiểm kê
+            self.update_da_quet_counter()
             
         except Exception as e:
             print(f"Lỗi khi xóa dòng: {str(e)}")
@@ -2311,18 +2386,41 @@ class KiemKhoApp:
         if not item:
             return
         
-        # Nếu click vào cột "Xóa" (index 8), xóa dòng đó
+        # Showroom: Nếu click vào cột "Xóa" (index 8), xóa dòng đó
         if column_index == 8:
             self.delete_row(item)
             return
         
         # Lấy giá trị hiện tại từ tree - đảm bảo lấy giá trị mới nhất
         values = list(self.tree.item(item, 'values'))
-        # Đảm bảo có đủ 9 cột (bao gồm cột Xóa)
+        # Showroom: Đảm bảo có đủ 9 cột (bao gồm cột Tình trạng ở index 6 và cột Xóa ở index 8)
         while len(values) < 9:
             values.append('')
+        
         # Lấy giá trị từ đúng cột được click
-        current_value = str(values[column_index]) if column_index < len(values) and values[column_index] is not None else ''
+        # QUAN TRỌNG: Với cột "Ghi chú" (index 7), đảm bảo chỉ lấy từ values[7], KHÔNG lấy từ note_thung_var
+        if column_index == 7:  # Cột "Ghi chú"
+            # Chỉ lấy giá trị từ values[7], không lấy từ bất kỳ nguồn nào khác
+            # Đảm bảo không bị ảnh hưởng bởi note_thung_var
+            current_value = ''
+            if len(values) > 7:
+                raw_value = values[7]
+                if raw_value is not None:
+                    current_value = str(raw_value).strip()
+            
+            # Nếu ISBN có trong scanned_items, lấy giá trị từ đó (nếu có), nhưng ưu tiên giá trị từ tree
+            isbn_value = values[1] if len(values) > 1 else ''
+            if isbn_value and isbn_value in self.scanned_items:
+                saved_ghi_chu = self.scanned_items[isbn_value].get('ghi_chu', '')
+                # Chỉ dùng giá trị từ scanned_items nếu giá trị trong tree rỗng
+                if not current_value and saved_ghi_chu:
+                    current_value = str(saved_ghi_chu).strip()
+            
+            # QUAN TRỌNG: Đảm bảo KHÔNG lấy từ note_thung_var - chỉ dùng giá trị đã lấy ở trên
+            # Nếu current_value vẫn rỗng, để rỗng (không lấy từ note_thung_var)
+        else:
+            # Các cột khác: lấy bình thường từ values
+            current_value = str(values[column_index]) if column_index < len(values) and values[column_index] is not None else ''
         
         # Kiểm tra xem ISBN có hợp lệ không bằng cách kiểm tra flag trong scanned_items
         # hoặc kiểm tra các giá trị trong row nếu không có trong scanned_items
@@ -2363,8 +2461,17 @@ class KiemKhoApp:
         x, y, width, height = bbox
         
         # Tạo Entry widget để edit trực tiếp
+        # QUAN TRỌNG: Với cột "Ghi chú", đảm bảo không bị ảnh hưởng bởi clipboard từ "Note thùng"
+        if column_index == 7:
+            # Xóa clipboard để tránh paste nhầm từ "Note thùng" khi nhấn Ctrl+V hoặc khi focus vào
+            try:
+                self.root.clipboard_clear()
+            except:
+                pass
+        
         self.edit_entry = tk.Entry(self.tree, font=('Arial', 10), 
                                    relief=tk.FLAT, bd=0, bg='#FFFFFF', fg='#000000')
+        # Insert giá trị đã được xử lý (chỉ từ values[7], không từ note_thung_var)
         self.edit_entry.insert(0, str(current_value))
         self.edit_entry.select_range(0, tk.END)
         self.edit_entry.place(x=x, y=y, width=width, height=height)
@@ -2400,18 +2507,21 @@ class KiemKhoApp:
             item = self.editing_item
             column_index = self.editing_column
             
-            # Lấy giá trị hiện tại và đảm bảo có đủ 8 cột
-            values = list(self.tree.item(item, 'values'))
+            # Kiểm tra xem item có còn tồn tại trong tree không (có thể đã bị xóa)
+            try:
+                # Lấy giá trị hiện tại và đảm bảo có đủ 8 cột
+                values = list(self.tree.item(item, 'values'))
+            except tk.TclError:
+                # Item đã bị xóa, hủy edit
+                self.cancel_edit()
+                return
+            
             values = self.ensure_values_format(values)
             
             isbn = values[1] if len(values) > 1 else ''  # ISBN ở index 1 (sau Số thứ tự)
             
-            # Nếu đang edit cột "Ghi chú", đảm bảo lấy giá trị từ scanned_items để không mất dữ liệu
-            if column_index == 7 and isbn in self.scanned_items:
-                saved_ghi_chu = self.scanned_items[isbn].get('ghi_chu', '')
-                # Nếu có giá trị đã lưu, đảm bảo values[7] có giá trị đúng
-                if saved_ghi_chu:
-                    values[7] = saved_ghi_chu
+            # KHÔNG tự động điền giá trị cho cột "Ghi chú" - để người dùng tự nhập
+            # Nếu đang edit cột "Ghi chú", chỉ lấy giá trị từ tree, không lấy từ scanned_items
             
             # Xử lý theo từng cột
             if column_index == 2:  # Tựa (chỉ cho phép edit khi ISBN không hợp lệ)
@@ -2435,287 +2545,47 @@ class KiemKhoApp:
                     self.editing_item = None
                 return
             
-            elif column_index == 3:  # Tồn thực tế
+            elif column_index == 3:  # Tồn thực tế - Showroom: Bỏ logic check chênh lệch
                 values[3] = new_value  # Đảm bảo đúng index
                 
-                # Kiểm tra và highlight nếu khác nhau - CHỈ chạy cho ISBN hợp lệ (thuộc thùng)
+                # Showroom: Lưu giá trị và tự động điền "Tồn tựa trong thùng" cho ISBN không tồn tại
                 if isbn in self.scanned_items:
                     self.scanned_items[isbn]['ton_thuc_te'] = new_value
+                    
+                    # Kiểm tra xem ISBN có tồn tại trong dữ liệu không
+                    is_new_isbn_not_in_data = self.scanned_items[isbn].get('is_new_isbn_not_in_data', False)
+                    
+                    # Nếu ISBN không tồn tại trong dữ liệu và có giá trị Tồn thực tế, tự động điền Tồn tựa trong thùng
+                    if is_new_isbn_not_in_data and new_value:
+                        try:
+                            ton_thuc_te_num = float(new_value) if new_value else 0
+                            if ton_thuc_te_num > 0:
+                                # Tự động đặt ton_trong_thung = ton_thuc_te
+                                ton_trong_thung_value = str(int(ton_thuc_te_num))
+                                # Đảm bảo có đủ 9 cột
+                                values = self.ensure_values_format(values)
+                                values[5] = ton_trong_thung_value  # Cột 5: Tồn tựa trong thùng
+                                
+                                # Cập nhật trong scanned_items
+                                self.scanned_items[isbn]['ton_trong_thung'] = ton_thuc_te_num
+                        except (ValueError, TypeError):
+                            # Nếu không parse được số, không làm gì
+                            pass
+                    
                     # Lưu backup khi có thay đổi
                     self.save_backup_on_change()
                     
-                    # Kiểm tra xem ISBN có hợp lệ không (thuộc thùng)
-                    is_invalid_isbn_item = self.scanned_items[isbn].get('is_invalid_isbn', False)
-                    is_new_isbn_not_in_data = self.scanned_items[isbn].get('is_new_isbn_not_in_data', False)
-                    ton_trong_thung = self.scanned_items[isbn].get('ton_trong_thung', 0)
+                    # Đảm bảo có đủ 9 cột
+                    values = self.ensure_values_format(values)
                     
-                    # Xử lý đặc biệt cho ISBN không tồn tại trong cả thùng và dữ liệu đầu vào
-                    # CHỈ áp dụng khi ISBN không tồn tại trong thùng (is_invalid_isbn_item = True) 
-                    # VÀ không tồn tại trong dữ liệu đầu vào (is_new_isbn_not_in_data = True)
-                    if is_new_isbn_not_in_data and is_invalid_isbn_item and new_value:
-                        try:
-                            # Tự động đặt ton_trong_thung = ton_thuc_te
-                            ton_thuc_te_num = float(new_value) if new_value else 0
-                            if ton_thuc_te_num > 0:
-                                # Cập nhật ton_trong_thung trong scanned_items
-                                self.scanned_items[isbn]['ton_trong_thung'] = ton_thuc_te_num
-                                
-                                # Cập nhật giá trị trong tree (cột 5: Tồn tựa trong thùng)
-                                while len(values) < 8:
-                                    values.append('')
-                                values[5] = str(int(ton_thuc_te_num))
-                                
-                                # Xóa tình trạng và ghi chú tự động (Thiếu/Dư) nếu có
-                                values[6] = ''  # Xóa tình trạng
-                                if 'tinh_trang' in self.scanned_items[isbn]:
-                                    del self.scanned_items[isbn]['tinh_trang']
-                                
-                                # Xóa ghi chú tự động (Thiếu X cuốn/Dư X cuốn) nhưng giữ lại phần người dùng nhập
-                                ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
-                                if not ghi_chu_hien_tai:
-                                    ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                                
-                                if ghi_chu_hien_tai:
-                                    import re
-                                    # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn"
-                                    ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                                    ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
-                                    values[7] = ghi_chu_cleaned.strip()
-                                    self.scanned_items[isbn]['ghi_chu'] = values[7]
-                                else:
-                                    values[7] = ''
-                                    self.scanned_items[isbn]['ghi_chu'] = ''
-                                
-                                # Xóa highlight nếu có
-                                self.remove_error_highlights(item)
-                                
-                                # Cập nhật tree
-                                self.tree.item(item, values=values)
-                                
-                                # Lưu backup khi có thay đổi
-                                self.save_backup_on_change()
-                                
-                                # Return để không chạy logic so sánh Thiếu/Dư
-                                return
-                        except (ValueError, TypeError):
-                            # Nếu không parse được, tiếp tục với logic bình thường
-                            pass
+                    # Đảm bảo Tình trạng và Ghi chú giữ nguyên (không tự động điền)
+                    # Tình trạng để trống
+                    if len(values) > 6:
+                        # Giữ nguyên giá trị Tình trạng hiện tại (có thể rỗng)
+                        pass
                     
-                    # CHỈ so sánh nếu ISBN hợp lệ (thuộc thùng) VÀ có giá trị Tồn tựa trong thùng hợp lệ (> 0)
-                    # Nếu is_invalid_isbn_item = True HOẶC ton_trong_thung = 0/rỗng, KHÔNG so sánh
-                    # Đảm bảo ton_trong_thung là số và > 0
-                    ton_trong_thung_valid = False
-                    try:
-                        if ton_trong_thung and ton_trong_thung != 0 and str(ton_trong_thung).strip() != '':
-                            ton_trong_thung_num = float(ton_trong_thung)
-                            if ton_trong_thung_num > 0:
-                                ton_trong_thung_valid = True
-                    except (ValueError, TypeError):
-                        ton_trong_thung_valid = False
-                    
-                    # QUAN TRỌNG: Nếu ISBN không hợp lệ, BỎ QUA HOÀN TOÀN logic so sánh
-                    # CHỈ so sánh nếu ISBN hợp lệ VÀ có ton_trong_thung hợp lệ
-                    # Kiểm tra chặt chẽ: nếu is_invalid_isbn_item = True, KHÔNG so sánh
-                    if is_invalid_isbn_item:
-                        # ISBN không hợp lệ - KHÔNG SO SÁNH, chỉ lưu giá trị và xóa các giá trị tự động điền
-                        # Xóa highlight nếu có
-                        self.remove_error_highlights(item)
-                        # Xóa tình trạng và ghi chú tự động nếu có
-                        while len(values) < 8:
-                            values.append('')
-                        
-                        # Lấy giá trị Ghi chú hiện tại từ scanned_items để giữ lại phần lỗi (LỖI: ...)
-                        ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
-                        if not ghi_chu_hien_tai:
-                            ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                        
-                        # Xóa tình trạng tự động (Thiếu/Dư) - BỎ HIỂN THỊ TRẠNG THÁI
-                        values[6] = ''  # Xóa tình trạng
-                        if 'tinh_trang' in self.scanned_items[isbn]:
-                            del self.scanned_items[isbn]['tinh_trang']
-                        
-                        # Xóa TẤT CẢ ghi chú tự động (Thiếu X cuốn/Dư X cuốn và LỖI: ...)
-                        # Coi như dòng trống mới, để trống Ghi chú
-                        values[7] = ''
-                        
-                        # Cập nhật scanned_items
-                        if isbn in self.scanned_items:
-                            self.scanned_items[isbn]['ghi_chu'] = ''
-                            # Đảm bảo flag is_invalid_isbn vẫn được giữ
-                            self.scanned_items[isbn]['is_invalid_isbn'] = True
-                        
-                        # Cập nhật tree với giá trị mới
-                        self.tree.item(item, values=values)
-                    elif ton_trong_thung_valid:
-                        try:
-                            ton_thuc_te_num = float(new_value) if new_value else 0
-                            ton_trong_thung_num = float(ton_trong_thung) if ton_trong_thung else 0
-                            
-                            # Chỉ so sánh nếu ton_trong_thung_num > 0 (có giá trị hợp lệ)
-                            if ton_trong_thung_num > 0:
-                                # Kiểm tra lệch
-                                if abs(ton_thuc_te_num - ton_trong_thung_num) > 0.01:
-                                    # Tự động điền "Thiếu" hoặc "Dư" vào cột Tình trạng (index 6)
-                                    if ton_thuc_te_num < ton_trong_thung_num:
-                                        tinh_trang = "Thiếu"
-                                        so_luong_lech = int(ton_trong_thung_num - ton_thuc_te_num)
-                                        ghi_chu_auto = f"Thiếu {so_luong_lech} cuốn"
-                                    else:
-                                        tinh_trang = "Dư"
-                                        so_luong_lech = int(ton_thuc_te_num - ton_trong_thung_num)
-                                        ghi_chu_auto = f"Dư {so_luong_lech} cuốn"
-                                    
-                                    # Đảm bảo có đủ 8 cột và đúng thứ tự: Số thứ tự, ISBN, Tựa, Tồn thực tế, Số thùng, Tồn tựa trong thùng, Tình trạng, Ghi chú
-                                    while len(values) < 8:
-                                        values.append('')
-                                    
-                                    # Lấy giá trị Ghi chú hiện tại từ scanned_items (để giữ lại phần người dùng nhập)
-                                    ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
-                                    if not ghi_chu_hien_tai:
-                                        # Nếu không có trong scanned_items, lấy từ values
-                                        ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                                    
-                                    # Tự động điền số lượng thiếu/dư vào ô Ghi chú
-                                    # QUAN TRỌNG: Xóa TẤT CẢ các pattern lỗi cũ trước khi thêm lỗi mới
-                                    import re
-                                    if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
-                                        # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
-                                        # Pattern: "Thiếu X cuốn" hoặc "Dư X cuốn" có thể có dấu phẩy, dấu chấm, khoảng trắng sau đó
-                                        ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                                        ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
-                                        ghi_chu_cleaned = ghi_chu_cleaned.strip()
-                                        
-                                        # Thêm thông tin thiếu/dư mới vào đầu
-                                        if ghi_chu_cleaned:
-                                            values[7] = f"{ghi_chu_auto}. {ghi_chu_cleaned}"
-                                        else:
-                                            values[7] = ghi_chu_auto
-                                    else:
-                                        # Chưa có nội dung, điền mới
-                                        values[7] = ghi_chu_auto
-                                    
-                                    values[6] = tinh_trang  # Tình trạng ở index 6
-                                    
-                                    # Cập nhật scanned_items
-                                    self.scanned_items[isbn]['tinh_trang'] = tinh_trang
-                                    self.scanned_items[isbn]['ghi_chu'] = values[7]  # Cập nhật ghi chú
-                                    
-                                    # Cập nhật tree
-                                    self.tree.item(item, values=values)
-                                    
-                                    # Tô đỏ 2 ô: Tồn thực tế (cột 3) và Tình trạng (cột 6)
-                                    self.highlight_error_cells(item)
-                                    
-                                    # Không hiển thị cảnh báo nữa vì đã có cột "Tình trạng" để hiển thị
-                                else:
-                                    # Không có lỗi - xóa highlight và tình trạng
-                                    # Xóa thông tin thiếu/dư khỏi Ghi chú (nếu có) nhưng giữ lại phần người dùng nhập
-                                    while len(values) < 8:
-                                        values.append('')
-                                    
-                                    ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                                    
-                                    # Xóa thông tin thiếu/dư tự động khỏi Ghi chú (nếu có)
-                                    if ghi_chu_hien_tai:
-                                        import re
-                                        # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
-                                        ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                                        ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
-                                        values[7] = ghi_chu_cleaned.strip()
-                                    else:
-                                        values[7] = ''
-                                    
-                                    # Xóa tình trạng nếu có
-                                    if len(values) > 6:
-                                        values[6] = ''
-                                        if 'tinh_trang' in self.scanned_items[isbn]:
-                                            del self.scanned_items[isbn]['tinh_trang']
-                                    
-                                    # Cập nhật ghi chú đã làm sạch
-                                    self.scanned_items[isbn]['ghi_chu'] = values[7]
-                                    
-                                    # Lưu backup khi có thay đổi
-                                    self.save_backup_on_change()
-                                    
-                                    # Cập nhật tree
-                                    self.tree.item(item, values=values)
-                                    
-                                    # Xóa highlight
-                                    self.remove_error_highlights(item)
-                        except (ValueError, TypeError):
-                            # Nếu không phải số, không highlight
-                            self.tree.item(item, tags=('',))
-                    else:
-                        # ISBN không hợp lệ (không thuộc thùng) hoặc ton_trong_thung = 0 - KHÔNG SO SÁNH, chỉ lưu giá trị
-                        # Xóa highlight nếu có
-                        self.remove_error_highlights(item)
-                        # Xóa tình trạng và ghi chú tự động nếu có
-                        while len(values) < 8:
-                            values.append('')
-                        
-                        # Lấy giá trị Ghi chú hiện tại từ scanned_items để giữ lại phần lỗi (LỖI: ...)
-                        ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
-                        if not ghi_chu_hien_tai:
-                            ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                        
-                        # Xóa tình trạng tự động (Thiếu/Dư) - BỎ HIỂN THỊ TRẠNG THÁI
-                        values[6] = ''  # Xóa tình trạng
-                        if 'tinh_trang' in self.scanned_items[isbn]:
-                            del self.scanned_items[isbn]['tinh_trang']
-                        
-                        # Xóa ghi chú tự động (Thiếu X cuốn/Dư X cuốn) nhưng GIỮ LẠI phần lỗi (LỖI: ...)
-                        if ghi_chu_hien_tai:
-                            import re
-                            # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" nhưng giữ lại "LỖI: ..."
-                            # Tách phần lỗi (LỖI: ...) ra trước
-                            ghi_chu_parts = []
-                            # Tìm tất cả các phần LỖI: (có thể có nhiều phần)
-                            loi_matches = re.findall(r'LỖI:[^.]*(?:\.[^.]*)*', ghi_chu_hien_tai, re.IGNORECASE)
-                            if loi_matches:
-                                ghi_chu_parts.extend(loi_matches)
-                            
-                            # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn"
-                            ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                            ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
-                            # Xóa các dấu chấm/phẩy thừa
-                            ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)
-                            ghi_chu_cleaned = re.sub(r'\.\s*$', '', ghi_chu_cleaned)  # Xóa dấu chấm cuối
-                            ghi_chu_cleaned = ghi_chu_cleaned.strip()
-                            
-                            # Nếu còn phần khác sau khi xóa thiếu/dư (không phải LỖI), có thể là phần người dùng nhập
-                            if ghi_chu_cleaned:
-                                # Kiểm tra xem có phải là phần LỖI không
-                                if re.match(r'^LỖI:', ghi_chu_cleaned, re.IGNORECASE):
-                                    # Là phần LỖI, chỉ giữ phần LỖI
-                                    values[7] = ghi_chu_cleaned
-                                else:
-                                    # Không phải LỖI, có thể là phần người dùng nhập, kết hợp với phần LỖI
-                                    if ghi_chu_parts:
-                                        # Có phần LỖI, kết hợp: LỖI trước, phần người dùng sau
-                                        values[7] = '. '.join(ghi_chu_parts) + '. ' + ghi_chu_cleaned
-                                    else:
-                                        # Không có phần LỖI, chỉ giữ phần người dùng nhập
-                                        values[7] = ghi_chu_cleaned
-                            elif ghi_chu_parts:
-                                # Chỉ có phần LỖI, không có phần khác
-                                values[7] = '. '.join(ghi_chu_parts)
-                            else:
-                                # Không có gì cả
-                                values[7] = ''
-                        else:
-                            values[7] = ''
-                        
-                        # Cập nhật scanned_items
-                        if isbn in self.scanned_items:
-                            self.scanned_items[isbn]['ghi_chu'] = values[7]
-                            # Đảm bảo flag is_invalid_isbn vẫn được giữ
-                            if not self.scanned_items[isbn].get('is_invalid_isbn', False):
-                                # Nếu chưa có flag, kiểm tra lại từ ton_trong_thung
-                                if not ton_trong_thung_valid:
-                                    self.scanned_items[isbn]['is_invalid_isbn'] = True
-                        
-                        # Cập nhật tree với giá trị mới
-                        self.tree.item(item, values=values)
+                    # Cập nhật tree
+                    self.tree.item(item, values=values)
             
             elif column_index == 4:  # Số thùng
                 # Validation: Mã thùng mới phải khác với tất cả mã thùng trong dữ liệu đầu vào
@@ -2768,20 +2638,30 @@ class KiemKhoApp:
                     if vi_tri_moi_current:
                         self.scanned_items[isbn]['vi_tri_moi'] = vi_tri_moi_current
         
-            elif column_index == 5:  # Tồn tựa trong thùng
+            elif column_index == 5:  # Tồn tựa trong thùng - Showroom: Bỏ logic check chênh lệch
                 # Chuyển thành số nguyên
                 try:
                     new_value_int = int(float(new_value)) if new_value else 0
                     values[5] = str(new_value_int)  # Đảm bảo đúng index và chuyển thành string (Tồn tựa trong thùng ở index 5)
                     if isbn in self.scanned_items:
                         self.scanned_items[isbn]['ton_trong_thung'] = new_value_int
+                        # Lưu backup khi có thay đổi
+                        self.save_backup_on_change()
                 except:
                     values[5] = new_value  # Đảm bảo đúng index
+                    if isbn in self.scanned_items:
+                        self.scanned_items[isbn]['ton_trong_thung'] = new_value
+                        # Lưu backup khi có thay đổi
+                        self.save_backup_on_change()
+                
+                # Đảm bảo có đủ 9 cột
+                values = self.ensure_values_format(values)
+                # Cập nhật tree
+                self.tree.item(item, values=values)
             
-            elif column_index == 7:  # Ghi chú
-                # Đảm bảo có đủ 8 cột
-                while len(values) < 8:
-                    values.append('')
+            elif column_index == 7:  # Ghi chú - Showroom: Bỏ logic check chênh lệch
+                # Đảm bảo có đủ 9 cột
+                values = self.ensure_values_format(values)
                 # Chỉ lưu giá trị mới vào values và scanned_items - không có logic phức tạp
                 values[7] = new_value
                 if isbn in self.scanned_items:
@@ -2790,110 +2670,6 @@ class KiemKhoApp:
                     self.save_backup_on_change()
                 # Cập nhật tree với giá trị mới
                 self.tree.item(item, values=values)
-                # Đảm bảo không có highlight nào che mất nội dung cột "Ghi chú"
-                # (highlight chỉ được tạo cho cột "Tồn thực tế" và "Tình trạng", không phải "Ghi chú")
-                # Return ngay để không chạy phần cập nhật tree chung bên dưới
-                return
-            
-            # Cập nhật tree với giá trị mới (chỉ cho các cột khác, không phải Ghi chú)
-            self.tree.item(item, values=values)
-            
-            # Nếu là cột Tồn thực tế, kiểm tra lại và cập nhật highlight
-            if column_index == 3:
-                if isbn in self.scanned_items:
-                    # Bỏ qua so sánh cho ISBN không tồn tại trong cả thùng và dữ liệu đầu vào
-                    is_new_isbn_not_in_data = self.scanned_items[isbn].get('is_new_isbn_not_in_data', False)
-                    is_invalid_isbn_item = self.scanned_items[isbn].get('is_invalid_isbn', False)
-                    # CHỈ bỏ qua so sánh khi ISBN không tồn tại trong CẢ HAI (thùng và dữ liệu đầu vào)
-                    if is_new_isbn_not_in_data and is_invalid_isbn_item:
-                        # Không so sánh, chỉ xóa highlight nếu có
-                        self.remove_error_highlights(item)
-                    else:
-                        ton_trong_thung = self.scanned_items[isbn]['ton_trong_thung']
-                        try:
-                            ton_thuc_te_num = float(new_value) if new_value else 0
-                            ton_trong_thung_num = float(ton_trong_thung) if ton_trong_thung else 0
-                            if abs(ton_thuc_te_num - ton_trong_thung_num) > 0.01:
-                                # Vẫn còn lệch - tự động cập nhật tình trạng và số lượng thiếu/dư vào Ghi chú
-                                if ton_thuc_te_num < ton_trong_thung_num:
-                                    tinh_trang = "Thiếu"
-                                    so_luong_lech = int(ton_trong_thung_num - ton_thuc_te_num)
-                                    ghi_chu_auto = f"Thiếu {so_luong_lech} cuốn"
-                                else:
-                                    tinh_trang = "Dư"
-                                    so_luong_lech = int(ton_thuc_te_num - ton_trong_thung_num)
-                                    ghi_chu_auto = f"Dư {so_luong_lech} cuốn"
-                                
-                                # Đảm bảo có đủ 8 cột
-                                while len(values) < 8:
-                                    values.append('')
-                                
-                                # Lấy giá trị Ghi chú hiện tại từ scanned_items (để giữ lại phần người dùng nhập)
-                                ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
-                                if not ghi_chu_hien_tai:
-                                    # Nếu không có trong scanned_items, lấy từ values
-                                    ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                                
-                                # Tự động điền số lượng thiếu/dư vào ô Ghi chú
-                                # QUAN TRỌNG: Xóa TẤT CẢ các pattern lỗi cũ trước khi thêm lỗi mới
-                                import re
-                                if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
-                                    # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
-                                    # Pattern: "Thiếu X cuốn" hoặc "Dư X cuốn" có thể có dấu phẩy, dấu chấm, khoảng trắng sau đó
-                                    ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                                    ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
-                                    ghi_chu_cleaned = ghi_chu_cleaned.strip()
-                                    
-                                    # Thêm thông tin thiếu/dư mới vào đầu
-                                    if ghi_chu_cleaned:
-                                        values[7] = f"{ghi_chu_auto}. {ghi_chu_cleaned}"
-                                    else:
-                                        values[7] = ghi_chu_auto
-                                else:
-                                    # Chưa có nội dung, điền mới
-                                    values[7] = ghi_chu_auto
-                                
-                                values[6] = tinh_trang  # Tình trạng ở index 6
-                                
-                                # Cập nhật scanned_items
-                                self.scanned_items[isbn]['tinh_trang'] = tinh_trang
-                                self.scanned_items[isbn]['ghi_chu'] = values[7]  # Cập nhật ghi chú
-                                
-                                self.tree.item(item, values=values)
-                                self.highlight_error_cells(item)
-                            else:
-                                # Đã khớp - xóa tình trạng
-                                # Xóa thông tin thiếu/dư khỏi Ghi chú (nếu có) nhưng giữ lại phần người dùng nhập
-                                while len(values) < 8:
-                                    values.append('')
-                                
-                                # Lấy giá trị Ghi chú hiện tại từ scanned_items (để giữ lại phần người dùng nhập)
-                                ghi_chu_hien_tai = self.scanned_items[isbn].get('ghi_chu', '')
-                                if not ghi_chu_hien_tai:
-                                    # Nếu không có trong scanned_items, lấy từ values
-                                    ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                                
-                                # Xóa thông tin thiếu/dư tự động khỏi Ghi chú (nếu có)
-                                if ghi_chu_hien_tai:
-                                    # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
-                                    import re
-                                    ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                                    ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
-                                    values[7] = ghi_chu_cleaned.strip()
-                                else:
-                                    values[7] = ''
-                                
-                                values[6] = ''  # Xóa tình trạng
-                                
-                                # Cập nhật scanned_items
-                                if 'tinh_trang' in self.scanned_items[isbn]:
-                                    del self.scanned_items[isbn]['tinh_trang']
-                                self.scanned_items[isbn]['ghi_chu'] = values[7]  # Cập nhật ghi chú đã làm sạch
-                                
-                                self.tree.item(item, values=values)
-                                self.remove_error_highlights(item)
-                        except:
-                            self.remove_error_highlights(item)
         finally:
             # Reset flag và cleanup
             self.is_processing_edit = False
@@ -2929,120 +2705,8 @@ class KiemKhoApp:
             pass  # Widget có thể không tồn tại
     
     def _check_and_update_status_after_increment(self, item_id, isbn):
-        """Kiểm tra và cập nhật tình trạng sau khi tăng số lượng - CHỈ cho ISBN hợp lệ (thuộc thùng)"""
-        if isbn not in self.scanned_items:
-            return
-        
-        # Kiểm tra xem ISBN có hợp lệ không (thuộc thùng)
-        is_invalid_isbn_item = self.scanned_items[isbn].get('is_invalid_isbn', False)
-        is_new_isbn_not_in_data = self.scanned_items[isbn].get('is_new_isbn_not_in_data', False)
-        ton_trong_thung = self.scanned_items[isbn].get('ton_trong_thung', 0)
-        
-        # QUAN TRỌNG: CHỈ bỏ qua so sánh khi ISBN không tồn tại trong CẢ HAI (thùng và dữ liệu đầu vào)
-        # Nếu ISBN tồn tại trong thùng (is_invalid_isbn_item = False), vẫn so sánh bình thường
-        if is_invalid_isbn_item and is_new_isbn_not_in_data:
-            return  # Bỏ qua so sánh cho ISBN không tồn tại trong cả thùng và dữ liệu đầu vào
-        
-        # Nếu ISBN không hợp lệ (không thuộc thùng) nhưng tồn tại trong dữ liệu đầu vào, vẫn bỏ qua so sánh
-        if is_invalid_isbn_item:
-            return  # Bỏ qua so sánh cho ISBN không hợp lệ
-        
-        # CHỈ so sánh nếu ISBN hợp lệ VÀ có giá trị Tồn tựa trong thùng hợp lệ (> 0)
-        # Đảm bảo ton_trong_thung là số và > 0
-        ton_trong_thung_valid = False
-        try:
-            if ton_trong_thung and ton_trong_thung != 0 and str(ton_trong_thung).strip() != '':
-                ton_trong_thung_num = float(ton_trong_thung)
-                if ton_trong_thung_num > 0:
-                    ton_trong_thung_valid = True
-        except (ValueError, TypeError):
-            ton_trong_thung_valid = False
-        
-        if not ton_trong_thung_valid:
-            return  # Bỏ qua so sánh nếu không có giá trị Tồn tựa trong thùng hợp lệ
-        
-        try:
-            values = list(self.tree.item(item_id, 'values'))
-            if len(values) < 8:
-                return
-            
-            ton_thuc_te_str = values[3] if len(values) > 3 else ''  # Tồn thực tế ở index 3
-            
-            try:
-                ton_thuc_te_num = float(ton_thuc_te_str) if ton_thuc_te_str else 0
-                ton_trong_thung_num = float(ton_trong_thung) if ton_trong_thung else 0
-                
-                # Chỉ so sánh nếu ton_trong_thung_num > 0 (có giá trị hợp lệ)
-                if ton_trong_thung_num > 0 and abs(ton_thuc_te_num - ton_trong_thung_num) > 0.01:
-                    # Có lệch - tự động cập nhật tình trạng và số lượng thiếu/dư vào Ghi chú
-                    if ton_thuc_te_num < ton_trong_thung_num:
-                        tinh_trang = "Thiếu"
-                        so_luong_lech = int(ton_trong_thung_num - ton_thuc_te_num)
-                        ghi_chu_auto = f"Thiếu {so_luong_lech} cuốn"
-                    else:
-                        tinh_trang = "Dư"
-                        so_luong_lech = int(ton_thuc_te_num - ton_trong_thung_num)
-                        ghi_chu_auto = f"Dư {so_luong_lech} cuốn"
-                    
-                    # Đảm bảo có đủ 8 cột
-                    while len(values) < 8:
-                        values.append('')
-                    
-                    # Lấy giá trị Ghi chú hiện tại
-                    ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                    
-                    # QUAN TRỌNG: Xóa các thông tin thiếu/dư cũ trong Ghi chú trước khi thêm mới
-                    # Để tránh tích lũy thông tin cũ (ví dụ: "Dư 2 cuốn. Dư 1 cuốn")
-                    # QUAN TRỌNG: Xóa TẤT CẢ các pattern lỗi cũ trước khi thêm lỗi mới
-                    import re
-                    ghi_chu_cleaned = ''
-                    if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
-                        # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
-                        ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                        ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
-                        ghi_chu_cleaned = ghi_chu_cleaned.strip()
-                    
-                    # Thêm thông tin thiếu/dư mới vào đầu
-                    if ghi_chu_cleaned:
-                        values[7] = f"{ghi_chu_auto}. {ghi_chu_cleaned}"
-                    else:
-                        values[7] = ghi_chu_auto
-                    
-                    values[6] = tinh_trang
-                    
-                    # Cập nhật scanned_items
-                    self.scanned_items[isbn]['tinh_trang'] = tinh_trang
-                    self.scanned_items[isbn]['ghi_chu'] = values[7]
-                    
-                    self.tree.item(item_id, values=values)
-                    self.highlight_error_cells(item_id)
-                else:
-                    # Đã khớp - xóa tình trạng
-                    while len(values) < 7:
-                        values.append('')
-                    
-                    ghi_chu_hien_tai = values[7] if len(values) > 7 else ''
-                    
-                    if ghi_chu_hien_tai:
-                        import re
-                        ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                        ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
-                        values[7] = ghi_chu_cleaned.strip()
-                    else:
-                        values[7] = ''
-                    
-                    values[6] = ''
-                    
-                    if 'tinh_trang' in self.scanned_items[isbn]:
-                        del self.scanned_items[isbn]['tinh_trang']
-                    self.scanned_items[isbn]['ghi_chu'] = values[7]
-                    
-                    self.tree.item(item_id, values=values)
-                    self.remove_error_highlights(item_id)
-            except:
-                pass
-        except:
-            pass
+        """Showroom: Bỏ logic check chênh lệch - hàm này không làm gì cả"""
+        pass  # Không làm gì cả
     
     def highlight_error_cells(self, item_id):
         """Tô đỏ 2 ô: Tồn thực tế và Tình trạng"""
@@ -3267,6 +2931,9 @@ class KiemKhoApp:
         # Xóa tất cả items
         for item in self.tree.get_children():
             self.tree.delete(item)
+        
+        # Cập nhật "Đã quét": số dòng trong Tổng hợp + số dòng trong Kiểm kê (0 vì đã clear)
+        self.update_da_quet_counter()
     
     def reset_scanned_data(self):
         """Reset lại tất cả dữ liệu đã quét và nhập để làm lại"""
@@ -3287,9 +2954,11 @@ class KiemKhoApp:
         # Xóa tất cả scanned items
         self.scanned_items = {}
         
-        # Reset số tựa về 0
-        if hasattr(self, 'so_tua_var'):
-            self.so_tua_var.set("0")
+        # Enable lại input số thùng sau khi RESET - restore màu nền ban đầu
+        if hasattr(self, 'so_thung_entry'):
+            self.so_thung_entry.config(state='normal', bg='#FFF9C4', fg='#000000')
+        if hasattr(self, 'so_thung_original_value'):
+            self.so_thung_original_value = ''
         
         # Xóa input ISBN
         if hasattr(self, 'isbn_entry'):
@@ -3299,6 +2968,9 @@ class KiemKhoApp:
         # Hủy edit nếu đang edit
         if self.edit_entry:
             self.cancel_edit()
+        
+        # Cập nhật "Đã quét"
+        self.update_da_quet_counter()
         
         # Thông báo thành công
         messagebox.showinfo("Thành công", "Đã reset lại tất cả dữ liệu đã quét.\nBạn có thể bắt đầu quét lại từ đầu.")
@@ -3597,24 +3269,34 @@ class KiemKhoApp:
         # Xóa dữ liệu đã quét
         self.scanned_items.clear()
         self.clear_table()
-        self.so_tua_var.set("0")
         
-        # QUAN TRỌNG: Reset field "Đã quét" về 0 sau khi save thành công
-        # Không cập nhật lại từ cache vì sẽ load thùng mới
-        if hasattr(self, 'so_tua_da_quet_var') and self.so_tua_da_quet_var:
-            self.so_tua_da_quet_var.set("0")
-        
-        # Reset các input: Số thùng, Thùng / vị trí mới, và Note thùng
+        # Enable lại input số thùng và reset về rỗng sau khi SAVE để cho phép nhập số thùng mới
+        # Restore màu nền ban đầu
+        if hasattr(self, 'so_thung_entry'):
+            self.so_thung_entry.config(state='normal', bg='#FFF9C4', fg='#000000')
         if hasattr(self, 'so_thung_var'):
             self.so_thung_var.set("")
+        if hasattr(self, 'so_thung_original_value'):
+            self.so_thung_original_value = ''
+        
+        # Reset các input: Thùng / vị trí mới, và Note thùng
+        # QUAN TRỌNG: KHÔNG reset so_thung_var ở đây để giữ lại số thùng hiện tại
+        # Nếu reset so_thung_var, sẽ làm mất số thùng và không thể đếm được số dòng trong Tổng hợp
+        # Người dùng có thể tự xóa và nhập số thùng mới khi cần
         if hasattr(self, 'vi_tri_moi_var'):
             self.vi_tri_moi_var.set("")
         if hasattr(self, 'note_thung_var'):
             self.note_thung_var.set("")
         
-        # Reset current_box_number và current_box_data để đảm bảo không còn cache
+        # Reset current_box_number về None, nhưng giữ lại số thùng trong so_thung_var
+        # Để khi người dùng nhập số thùng mới, có thể đếm được số dòng trong Tổng hợp
         self.current_box_number = None
         self.current_box_data = None
+        
+        # Cập nhật "Đã quét" sau khi save: số dòng trong Tổng hợp + số dòng trong Kiểm kê (0 vì đã clear)
+        # QUAN TRỌNG: Cập nhật SAU KHI giữ lại so_thung_var để đếm đúng
+        # Nếu so_thung_var vẫn còn giá trị, sẽ đếm được số dòng trong Tổng hợp cho số thùng đó
+        self.update_da_quet_counter()
         
         # Chuyển sang tab Tổng hợp
         self.notebook.select(1)
@@ -3623,6 +3305,54 @@ class KiemKhoApp:
         total_count = len(self.tong_hop_data)
         messagebox.showinfo("Thành công", 
             f"Đã lưu {items_count:,} dòng mới vào Tổng hợp!\nTổng cộng: {total_count:,} dòng")
+    
+    def _aggregate_tong_hop_data(self):
+        """Cộng dồn các dòng có cùng ISBN và cùng Số thùng trong tong_hop_data"""
+        if not self.tong_hop_data:
+            return []
+        
+        # Dictionary để nhóm các dòng theo (ISBN, Số thùng)
+        aggregated = {}
+        
+        for data in self.tong_hop_data:
+            isbn = str(data.get('ISBN', '')).strip()
+            so_thung = str(data.get('Số thùng', '')).strip()
+            
+            # Tạo key từ ISBN và Số thùng
+            key = (isbn, so_thung)
+            
+            if key not in aggregated:
+                # Dòng đầu tiên - giữ nguyên tất cả thông tin
+                aggregated[key] = data.copy()
+                # Đảm bảo "Tồn thực tế" là số
+                try:
+                    aggregated[key]['Tồn thực tế'] = float(data.get('Tồn thực tế', 0) or 0)
+                except (ValueError, TypeError):
+                    aggregated[key]['Tồn thực tế'] = 0.0
+            else:
+                # Dòng trùng - cộng dồn "Tồn thực tế"
+                try:
+                    ton_thuc_te_new = float(data.get('Tồn thực tế', 0) or 0)
+                except (ValueError, TypeError):
+                    ton_thuc_te_new = 0.0
+                
+                aggregated[key]['Tồn thực tế'] = aggregated[key].get('Tồn thực tế', 0) + ton_thuc_te_new
+        
+        # Chuyển dictionary thành list và chuyển "Tồn thực tế" về string để hiển thị
+        result = []
+        for data in aggregated.values():
+            # Chuyển "Tồn thực tế" về string (loại bỏ .0 nếu là số nguyên)
+            ton_thuc_te = data.get('Tồn thực tế', 0)
+            if isinstance(ton_thuc_te, float):
+                if ton_thuc_te == int(ton_thuc_te):
+                    data['Tồn thực tế'] = str(int(ton_thuc_te))
+                else:
+                    data['Tồn thực tế'] = str(ton_thuc_te)
+            else:
+                data['Tồn thực tế'] = str(ton_thuc_te)
+            result.append(data)
+        
+        return result
     
     def update_tong_hop_table(self):
         """Cập nhật bảng tổng hợp - tối ưu cho dữ liệu lớn"""
@@ -3642,8 +3372,11 @@ class KiemKhoApp:
             # Tắt update trong quá trình insert để tăng tốc độ
             self.root.update_idletasks()
             
-            # Kiểm tra số lượng dữ liệu
-            total_items = len(self.tong_hop_data)
+            # Cộng dồn dữ liệu: các dòng có cùng ISBN và cùng Số thùng
+            aggregated_data = self._aggregate_tong_hop_data()
+            
+            # Kiểm tra số lượng dữ liệu (sau khi cộng dồn)
+            total_items = len(aggregated_data)
             
             # Tối ưu batch size dựa trên số lượng dữ liệu
             # Với dữ liệu lớn (>1000 items), sử dụng batch insert để tránh freeze UI
@@ -3666,7 +3399,7 @@ class KiemKhoApp:
                 
                 processed = 0
                 for i in range(0, total_items, batch_size):
-                    batch = self.tong_hop_data[i:i + batch_size]
+                    batch = aggregated_data[i:i + batch_size]
                     
                     # Tạo values list cho batch trước để tối ưu
                     batch_values = []
@@ -3708,7 +3441,7 @@ class KiemKhoApp:
                             self.root.update()
             else:
                 # Với dữ liệu nhỏ, insert trực tiếp
-                for data in self.tong_hop_data:
+                for data in aggregated_data:
                     try:
                         self.tong_hop_tree.insert('', 'end', values=(
                             data.get('N/X', ''),
@@ -3918,9 +3651,8 @@ class KiemKhoApp:
                     if column_name:
                         self.tong_hop_data[data_index][column_name] = new_value
                         
-                        # Nếu là cột "Tồn thực tế" (column_index == 6), tự động check và cập nhật Tình trạng và Ghi chú
-                        if column_index == 6:
-                            self._check_and_update_tinh_trang_tong_hop(data_index, new_value, values, item_id)
+                        # Showroom: Bỏ logic so sánh và tự động điền Tình trạng/Ghi chú khi sửa Tồn thực tế
+                        # Nếu là cột "Tồn thực tế" (column_index == 6), chỉ lưu giá trị, không check chênh lệch
                         
                         # Lưu backup khi chỉnh sửa (gọi trực tiếp, không dùng after)
                         try:
@@ -3946,198 +3678,8 @@ class KiemKhoApp:
             self.tong_hop_editing_column = None
     
     def _check_and_update_tinh_trang_tong_hop(self, data_index, ton_thuc_te_new, values, item_id):
-        """Tự động check và cập nhật Tình trạng và Ghi chú khi sửa Tồn thực tế ở tab Tổng hợp"""
-        try:
-            if data_index < 0 or data_index >= len(self.tong_hop_data):
-                return
-            
-            data = self.tong_hop_data[data_index]
-            isbn = data.get('ISBN', '').strip()
-            so_thung = data.get('Số thùng', '').strip()
-            
-            if not isbn or not so_thung:
-                return
-            
-            # Tìm "Tồn tựa trong thùng" từ dữ liệu gốc (self.df)
-            ton_trong_thung = 0
-            if self.df is not None and not self.df.empty:
-                # Tìm trong df dựa trên ISBN và số thùng
-                isbn_clean = str(isbn).strip()
-                isbn_clean_digits = ''.join(filter(str.isdigit, isbn_clean))
-                
-                # Tìm cột số thùng và ISBN trong df
-                so_thung_col = None
-                isbn_col = None
-                ton_tung_tua_col = None
-                
-                for col in self.df.columns:
-                    col_lower = str(col).lower().strip()
-                    if ('số thùng' in col_lower or 'so thung' in col_lower or 
-                        col_lower == 'thùng' or col_lower == 'thung'):
-                        so_thung_col = col
-                    elif 'isbn' in col_lower:
-                        isbn_col = col
-                    elif (('tồn' in col_lower and 'tựa' in col_lower) or 
-                          ('ton' in col_lower and 'tua' in col_lower) or 
-                          'qty tựa trong thùng' in col_lower or 
-                          'qty tua trong thung' in col_lower):
-                        ton_tung_tua_col = col
-                
-                # Tìm dòng khớp với ISBN và số thùng
-                if so_thung_col and isbn_col and ton_tung_tua_col:
-                    matched_row = None
-                    for idx, row in self.df.iterrows():
-                        row_isbn = str(row.get(isbn_col, '')).strip()
-                        row_so_thung = str(row.get(so_thung_col, '')).strip()
-                        
-                        # So sánh ISBN (có thể không khớp hoàn toàn)
-                        row_isbn_digits = ''.join(filter(str.isdigit, row_isbn))
-                        isbn_match = (row_isbn == isbn_clean or 
-                                     row_isbn.endswith(isbn_clean) or 
-                                     isbn_clean.endswith(row_isbn) or
-                                     (row_isbn_digits and isbn_clean_digits and row_isbn_digits == isbn_clean_digits))
-                        
-                        # So sánh số thùng (không phân biệt chữ hoa/thường)
-                        row_so_thung_lower = row_so_thung.lower()
-                        so_thung_lower = so_thung.lower()
-                        so_thung_match = (row_so_thung_lower == so_thung_lower or 
-                                         row_so_thung_lower.endswith(so_thung_lower) or 
-                                         so_thung_lower.endswith(row_so_thung_lower))
-                        
-                        if isbn_match and so_thung_match:
-                            matched_row = row
-                            break
-                    
-                    if matched_row is not None:
-                        ton_trong_thung = matched_row.get(ton_tung_tua_col, 0)
-                        try:
-                            ton_trong_thung = int(float(ton_trong_thung)) if ton_trong_thung else 0
-                        except:
-                            ton_trong_thung = 0
-            
-            # Kiểm tra xem ISBN có tồn tại trong dữ liệu đầu vào không
-            isbn_not_in_input_data = False
-            if ton_trong_thung == 0:  # Nếu không tìm thấy trong box data
-                isbn_not_in_input_data = not self.is_isbn_in_input_data(isbn)
-            
-            # So sánh Tồn thực tế với Tồn tựa trong thùng
-            try:
-                ton_thuc_te_num = float(ton_thuc_te_new) if ton_thuc_te_new else 0
-                ton_trong_thung_num = float(ton_trong_thung) if ton_trong_thung else 0
-                
-                # Đảm bảo values có đủ 11 cột (theo tonghop_columns)
-                while len(values) < 11:
-                    values.append('')
-                
-                # Nếu ISBN không tồn tại trong cả thùng và dữ liệu đầu vào, tự động đặt ton_trong_thung = ton_thuc_te và bỏ qua so sánh
-                if isbn_not_in_input_data and ton_thuc_te_num > 0:
-                    # Tự động đặt ton_trong_thung = ton_thuc_te (không cần cập nhật trong df vì đây là view tổng hợp)
-                    # Xóa tình trạng và ghi chú tự động (Thiếu/Dư) nếu có
-                    values[8] = ''  # Xóa tình trạng
-                    data['Tình trạng'] = ''
-                    
-                    # Xóa ghi chú tự động (Thiếu X cuốn/Dư X cuốn) nhưng giữ lại phần người dùng nhập
-                    ghi_chu_hien_tai = data.get('Ghi chú', '')
-                    if not ghi_chu_hien_tai:
-                        ghi_chu_hien_tai = values[9] if len(values) > 9 else ''
-                    
-                    if ghi_chu_hien_tai:
-                        import re
-                        # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn"
-                        ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                        ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
-                        values[9] = ghi_chu_cleaned.strip()
-                        data['Ghi chú'] = values[9]
-                    else:
-                        values[9] = ''
-                        data['Ghi chú'] = ''
-                    
-                    # Cập nhật tree
-                    self.tong_hop_tree.item(item_id, values=values)
-                    return  # Bỏ qua logic so sánh Thiếu/Dư
-                
-                if abs(ton_thuc_te_num - ton_trong_thung_num) > 0.01:
-                    # Có lệch - tự động cập nhật tình trạng và số lượng thiếu/dư vào Ghi chú
-                    if ton_thuc_te_num < ton_trong_thung_num:
-                        tinh_trang = "Thiếu"
-                        so_luong_lech = int(ton_trong_thung_num - ton_thuc_te_num)
-                        ghi_chu_auto = f"Thiếu {so_luong_lech} cuốn"
-                    else:
-                        tinh_trang = "Dư"
-                        so_luong_lech = int(ton_thuc_te_num - ton_trong_thung_num)
-                        ghi_chu_auto = f"Dư {so_luong_lech} cuốn"
-                    
-                    # Lấy giá trị Ghi chú hiện tại từ tong_hop_data (để giữ lại phần người dùng nhập)
-                    ghi_chu_hien_tai = data.get('Ghi chú', '')
-                    if not ghi_chu_hien_tai:
-                        # Nếu không có trong data, lấy từ values
-                        ghi_chu_hien_tai = values[9] if len(values) > 9 else ''
-                    
-                    # Tự động điền số lượng thiếu/dư vào ô Ghi chú
-                    # QUAN TRỌNG: Xóa TẤT CẢ các pattern lỗi cũ trước khi thêm lỗi mới
-                    import re
-                    if ghi_chu_hien_tai and ghi_chu_hien_tai.strip():
-                        # Xóa TẤT CẢ các pattern "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
-                        ghi_chu_cleaned = re.sub(r'(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                        ghi_chu_cleaned = re.sub(r'\.\s*\.', '.', ghi_chu_cleaned)  # Xóa dấu chấm kép
-                        ghi_chu_cleaned = ghi_chu_cleaned.strip()
-                        
-                        # Thêm thông tin thiếu/dư mới vào đầu
-                        if ghi_chu_cleaned:
-                            ghi_chu_moi = f"{ghi_chu_auto}. {ghi_chu_cleaned}"
-                        else:
-                            ghi_chu_moi = ghi_chu_auto
-                    else:
-                        # Chưa có nội dung, điền mới
-                        ghi_chu_moi = ghi_chu_auto
-                    
-                    values[8] = tinh_trang  # Tình trạng ở index 8
-                    values[9] = ghi_chu_moi  # Ghi chú mới
-                    
-                    # Cập nhật tong_hop_data
-                    self.tong_hop_data[data_index]['Tình trạng'] = tinh_trang
-                    self.tong_hop_data[data_index]['Ghi chú'] = ghi_chu_moi
-                    
-                    # Cập nhật tree
-                    if item_id:
-                        self.tong_hop_tree.item(item_id, values=values)
-                else:
-                    # Đã khớp - xóa tình trạng
-                    # Xóa thông tin thiếu/dư khỏi Ghi chú (nếu có) nhưng giữ lại phần người dùng nhập
-                    # Lấy giá trị Ghi chú hiện tại từ tong_hop_data (để giữ lại phần người dùng nhập)
-                    ghi_chu_hien_tai = data.get('Ghi chú', '')
-                    if not ghi_chu_hien_tai:
-                        # Nếu không có trong data, lấy từ values
-                        ghi_chu_hien_tai = values[9] if len(values) > 9 else ''
-                    
-                    # Xóa thông tin thiếu/dư tự động khỏi Ghi chú (nếu có)
-                    if ghi_chu_hien_tai:
-                        # Loại bỏ các pattern như "Thiếu X cuốn" hoặc "Dư X cuốn" và các dấu câu/khoảng trắng sau đó
-                        import re
-                        ghi_chu_cleaned = re.sub(r'^(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_hien_tai, flags=re.IGNORECASE)
-                        ghi_chu_cleaned = re.sub(r'[,\.\s]*(Thiếu \d+ cuốn|Dư \d+ cuốn)[,\.\s]*', '', ghi_chu_cleaned, flags=re.IGNORECASE)
-                        ghi_chu_cleaned = ghi_chu_cleaned.strip()
-                    else:
-                        ghi_chu_cleaned = ''
-                    
-                    values[8] = ''  # Xóa tình trạng
-                    values[9] = ghi_chu_cleaned  # Ghi chú đã làm sạch
-                    
-                    # Cập nhật tong_hop_data
-                    self.tong_hop_data[data_index]['Tình trạng'] = ''
-                    self.tong_hop_data[data_index]['Ghi chú'] = ghi_chu_cleaned
-                    
-                    # Cập nhật tree
-                    if item_id:
-                        self.tong_hop_tree.item(item_id, values=values)
-            except Exception as e:
-                # Nếu có lỗi khi so sánh, không làm gì cả
-                print(f"Lỗi khi check tình trạng: {str(e)}")
-                pass
-        except Exception as e:
-            # Nếu có lỗi, không làm gì cả
-            print(f"Lỗi khi check và update tình trạng: {str(e)}")
-            pass
+        """Showroom: Bỏ logic so sánh - hàm này không làm gì cả"""
+        pass  # Không làm gì cả
     
     def cancel_tong_hop_edit(self):
         """Hủy việc chỉnh sửa trong tab Tổng hợp"""
@@ -4353,8 +3895,10 @@ class KiemKhoApp:
             traceback.print_exc()
     
     def export_tong_hop_excel(self):
-        """Xuất file Excel tổng hợp (logic giống save_data cũ)"""
-        if not self.tong_hop_data:
+        """Xuất file Excel tổng hợp (logic giống save_data cũ) - sử dụng dữ liệu đã cộng dồn"""
+        # Sử dụng dữ liệu đã cộng dồn (các dòng có cùng ISBN và cùng Số thùng)
+        aggregated_data = self._aggregate_tong_hop_data()
+        if not aggregated_data:
             messagebox.showwarning("Cảnh báo", "Chưa có dữ liệu tổng hợp để xuất!")
             return
         
@@ -4368,7 +3912,7 @@ class KiemKhoApp:
                 return
         
         pd = self.pd  # Alias để dùng trong hàm này
-        df_save = pd.DataFrame(self.tong_hop_data)
+        df_save = pd.DataFrame(aggregated_data)
         
         # Tạo tên file theo format
         from datetime import datetime
@@ -4502,18 +4046,27 @@ class KiemKhoApp:
                         progress_window.update()
                     
                     while retry_count < max_retries and not save_success:
+                        temp_file = None
                         try:
                             # Lưu vào file tạm trước (atomic operation để tránh mất dữ liệu nếu crash)
-                            # Sử dụng .xlsx extension vì pandas yêu cầu extension hợp lệ cho openpyxl engine
-                            temp_file = Path(file2_path).with_name(Path(file2_path).stem + '_temp.xlsx')
+                            # Tạo temp file với extension .xlsx để engine openpyxl có thể xử lý
+                            file2_path_obj = Path(file2_path)
+                            temp_file = file2_path_obj.parent / (file2_path_obj.stem + '_temp.xlsx')
+                            
+                            # Xóa temp file cũ nếu tồn tại
+                            if temp_file.exists():
+                                try:
+                                    temp_file.unlink()
+                                except:
+                                    pass
                             
                             # Lưu file tạm với data tổng hợp
                             df_save.to_excel(str(temp_file), index=False, engine='openpyxl')
                             
                             # Nếu file cũ tồn tại, xóa nó trước
-                            if Path(file2_path).exists():
+                            if file2_path_obj.exists():
                                 try:
-                                    Path(file2_path).unlink()
+                                    file2_path_obj.unlink()
                                 except:
                                     pass
                             
@@ -4539,8 +4092,8 @@ class KiemKhoApp:
                             traceback.print_exc()
                             break
                         finally:
-                            # Xóa file tạm nếu còn tồn tại (nếu có lỗi)
-                            if 'temp_file' in locals() and temp_file.exists():
+                            # Xóa file tạm nếu còn tồn tại (nếu có lỗi hoặc chưa rename thành công)
+                            if temp_file is not None and temp_file.exists():
                                 try:
                                     temp_file.unlink()
                                 except:
@@ -4575,15 +4128,15 @@ class KiemKhoApp:
         """Lấy đường dẫn file backup khi khởi tạo - chỉ gọi một lần"""
         if getattr(sys, 'frozen', False):
             # Chạy từ executable - lưu cùng thư mục với file .exe
-            return Path(sys.executable).parent / "kiem_kho_backup.json"
+            return Path(sys.executable).parent / "kiem_kho_showroom_backup.json"
         else:
             # Chạy từ source code - lưu cùng thư mục với file .py
             try:
-                return Path(__file__).parent / "kiem_kho_backup.json"
+                return Path(__file__).parent / "kiem_kho_showroom_backup.json"
             except NameError:
                 # Nếu __file__ không có (ví dụ khi chạy từ interactive shell)
                 # Sử dụng thư mục hiện tại hoặc thư mục làm việc
-                return Path.cwd() / "kiem_kho_backup.json"
+                return Path.cwd() / "kiem_kho_showroom_backup.json"
     
     def get_backup_file_path(self):
         """Lấy đường dẫn file backup - sử dụng đường dẫn đã lưu khi khởi tạo"""
@@ -4593,7 +4146,7 @@ class KiemKhoApp:
             return self._backup_file_path
         else:
             # Fallback nếu chưa có (không nên xảy ra)
-            return Path.cwd() / "kiem_kho_backup.json"
+            return Path.cwd() / "kiem_kho_showroom_backup.json"
     
     def save_backup(self):
         """Tự động lưu backup dữ liệu (scanned_items và tong_hop_data) - tối ưu cho dữ liệu lớn"""
@@ -4834,14 +4387,32 @@ class KiemKhoApp:
                 self.tong_hop_data = tong_hop_data_backup
                 self.current_box_number = current_box_number_backup
                 
+                # QUAN TRỌNG: Cập nhật số thùng vào input field TRƯỚC các thao tác khác
+                # Để đảm bảo update_da_quet_counter() có thể đọc đúng số thùng
+                if hasattr(self, 'so_thung_var') and self.current_box_number:
+                    self.so_thung_var.set(str(self.current_box_number).strip())
+                else:
+                    # Nếu không có current_box_number nhưng có tong_hop_data, thử lấy số thùng từ dữ liệu đầu tiên
+                    if self.tong_hop_data and len(self.tong_hop_data) > 0:
+                        first_data = self.tong_hop_data[0]
+                        so_thung_from_data = str(first_data.get('Số thùng', '')).strip()
+                        if so_thung_from_data and hasattr(self, 'so_thung_var'):
+                            self.so_thung_var.set(so_thung_from_data)
+                            self.current_box_number = so_thung_from_data
+                
+                # Đảm bảo Tkinter variable được sync
+                self.root.update_idletasks()
+                
                 # Cập nhật UI sau khi khôi phục
                 if hasattr(self, 'tong_hop_tree') and self.tong_hop_tree:
                     self.update_tong_hop_table()
                 
+                # Xóa tất cả items hiện tại trong tree (không gọi clear_table để tránh gọi update_da_quet_counter nhiều lần)
+                for item in self.tree.get_children():
+                    self.tree.delete(item)
+                
                 # Nếu có dữ liệu đang quét, hiển thị lại trong bảng
                 if self.scanned_items:
-                    # Hiển thị lại dữ liệu đã quét trong bảng
-                    self.clear_table()
                     for isbn, info in self.scanned_items.items():
                         # Tạo lại item trong tree
                         item_id = self.tree.insert('', tk.END, values=(
@@ -4858,16 +4429,24 @@ class KiemKhoApp:
                         # Cập nhật item_id trong scanned_items
                         info['item_id'] = item_id
                     
-                    # Cập nhật số tựa đã quét
-                    if hasattr(self, 'so_tua_var'):
-                        self.so_tua_var.set(str(len(self.scanned_items)))
-                    if hasattr(self, 'so_tua_da_quet_var') and self.current_box_number:
-                        so_tua_da_quet = self.count_scanned_titles_for_box(self.current_box_number)
-                        self.so_tua_da_quet_var.set(str(so_tua_da_quet))
-                    
-                    # Cập nhật số thùng nếu có
-                    if hasattr(self, 'so_thung_var') and self.current_box_number:
-                        self.so_thung_var.set(self.current_box_number)
+                    # Re-index STT sau khi insert tất cả items
+                    children = list(self.tree.get_children())
+                    for idx, child in enumerate(children, start=1):
+                        child_values = list(self.tree.item(child, 'values'))
+                        if len(child_values) >= 1:
+                            child_values[0] = str(idx)
+                            self.tree.item(child, values=child_values)
+                
+                # Đảm bảo UI được cập nhật trước khi đếm
+                self.root.update_idletasks()
+                
+                # QUAN TRỌNG: Luôn cập nhật "Đã quét" sau khi khôi phục (cả khi có hoặc không có scanned_items)
+                # Để hiển thị số dòng trong Tổng hợp cho cùng Số thùng + số dòng trong Kiểm kê
+                # Đảm bảo cập nhật sau khi:
+                # 1. tong_hop_data đã được khôi phục
+                # 2. so_thung_var đã được set
+                # 3. Tất cả items đã được insert vào tree
+                self.update_da_quet_counter()
                 
                 messagebox.showinfo("Thành công", 
                     f"Đã khôi phục dữ liệu!\n\n"

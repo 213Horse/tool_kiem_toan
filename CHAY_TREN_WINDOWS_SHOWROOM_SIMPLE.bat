@@ -1,9 +1,9 @@
 @echo off
-title Kiem Kho App
+title Kiem Kho Showroom App
 color 0A
 
 echo ========================================
-echo    KIEM KHO - AUTO INSTALL AND RUN
+echo    KIEM KHO SHOWROOM - AUTO INSTALL AND RUN
 echo ========================================
 echo.
 
@@ -57,18 +57,18 @@ echo [OK] Libraries installed successfully
 echo.
 
 REM Check Excel file
-if not exist "DuLieuDauVao.xlsx" (
-    echo [WARNING] DuLieuDauVao.xlsx not found!
+if not exist "DuLieuDauVaoShowroom.xlsx" (
+    echo [WARNING] DuLieuDauVaoShowroom.xlsx not found!
     echo Please make sure this file is in the same folder!
     echo.
 )
 
 REM Run application
 echo ========================================
-echo    STARTING APPLICATION...
+echo    STARTING SHOWROOM APPLICATION...
 echo ========================================
 echo.
-python kiem_kho_app.py
+python kiem_kho_showroom.py
 
 if errorlevel 1 (
     echo.
@@ -78,10 +78,5 @@ if errorlevel 1 (
 )
 
 pause
-
-
-
-
-
 
 
