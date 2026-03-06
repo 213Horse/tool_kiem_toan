@@ -117,3 +117,4 @@ Lưu ý: Tên cột có thể có khoảng trắng, ứng dụng sẽ tự độ
 - Có thể nhập ISBN thủ công nếu không có máy quét
 
 # tool_kiem_toan
+# quet_kiem_kho_CDIMEX
